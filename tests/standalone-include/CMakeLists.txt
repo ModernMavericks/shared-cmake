@@ -1,0 +1,18 @@
+cmake_minimum_required(VERSION 3.16)
+# LANGUAGES NONE: no C/CXX compiler enabled -> if including MavericksCompatGuard
+# fired RequireAppleClang, configure would FATAL. It must not.
+project(standalone_include LANGUAGES NONE)
+find_package(MavericksSharedCMake REQUIRED)
+include(MavericksCompatGuard)
+if(NOT COMMAND mavericks_assert_binary_compatible)
+  message(FATAL_ERROR "mavericks_assert_binary_compatible not defined after include(MavericksCompatGuard)")
+endif()
+include(MavericksFetch)
+if(NOT COMMAND mavericks_fetch_sdk)
+  message(FATAL_ERROR "mavericks_fetch_sdk not defined after include(MavericksFetch)")
+endif()
+include(MavericksSparkle)
+if(NOT COMMAND mavericks_add_updater_app OR NOT COMMAND mavericks_fetch_sparkle)
+  message(FATAL_ERROR "MavericksSparkle did not define its functions after include")
+endif()
+message(STATUS "standalone-include OK: helpers available without the AppleClang gate")
