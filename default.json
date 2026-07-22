@@ -21,7 +21,7 @@
       "depNameTemplate": "mavericks-legacysupport",
       "packageNameTemplate": "ModernMavericks/macports-legacy-support",
       "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$",
+      "extractVersionTemplate": "^v?(?<version>.+)$",
       "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-mavericks\\.(?<build>\\d+)$"
     }
   ]
