@@ -127,6 +127,29 @@ static NSString *const kRelaunchMarker = @"@MAVERICKS_RELAUNCH_MARKER@";
                   inModes:@[NSDefaultRunLoopMode]];
 }
 - (void)userDidCancelDownload:(SUUpdater *)updater   { (void)updater; NSLog(@"[@MAVERICKS_LOG_PREFIX@] download cancelled -> terminating"); [NSApp terminate:nil]; }
+// The update cycle aborted with an error (appcast/network/proxy unreachable, bad signature, ...). Sparkle
+// has already shown -- or is about to show -- its modal error alert on a user-initiated check; on a silent
+// check it shows nothing. Without this the process had NO path to terminate on the error branch (the
+// watchdog is background-only, and no other delegate fires), so a user-initiated check that errored left
+// the app stuck open on the dismissed alert. Mirror -updaterDidNotFindUpdate:'s exit discipline.
+- (void)updater:(SUUpdater *)updater didAbortWithError:(NSError *)error {
+    (void)updater;
+    [self cancelWatchdog];   // cycle aborted -> nothing left to wait on
+    // Silent/background abort: no alert to wait for -> exit now so the process never lingers.
+    if (!gUserInitiated) {
+        NSLog(@"[@MAVERICKS_LOG_PREFIX@] check aborted (%@); not user-initiated -> terminating", error.localizedDescription);
+        [NSApp terminate:nil];
+        return;
+    }
+    // User-initiated: Sparkle shows a modal error alert. Terminate once it's dismissed, using the same
+    // NSDefaultRunLoopMode zero-delay timer as -updaterDidNotFindUpdate: -- it can't fire inside the
+    // alert's nested modal loop, so we quit exactly when the user closes the alert (never before it shows).
+    NSLog(@"[@MAVERICKS_LOG_PREFIX@] check aborted (%@); user-initiated -> terminate after the error alert is dismissed", error.localizedDescription);
+    [self performSelector:@selector(terminateNow)
+               withObject:nil
+               afterDelay:0.0
+                  inModes:@[NSDefaultRunLoopMode]];
+}
 // NSUserNotificationCenter delegate (no-pane mode). Force the banner to show even if we're frontmost,
 // and on click re-launch ourselves foreground (no --background) to run Sparkle's install UI.
 - (BOOL)userNotificationCenter:(NSUserNotificationCenter *)c
