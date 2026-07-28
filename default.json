@@ -6,13 +6,15 @@
     "Provides config:recommended + automerge. shared-cmake is a versioned GitHub Action: consumers pin",
     "'uses: ModernMavericks/shared-cmake/...@v1' and Renovate's native github-actions manager tracks it",
     "-- no custom manager needed for it. This preset does add a manager for mavericks-legacysupport",
-    "releases (tag the pinned version with a '# mavericks-legacysupport' comment)."
+    "releases (tag the pinned version with a '# mavericks-legacysupport' comment).",
+    "Automerge waits for a green build (ignoreTests:false): a consumer must produce a CI status check",
+    "on Renovate PRs (e.g. a pull_request-triggered build). A repo with NO build to gate sets ignoreTests:true locally."
   ],
   "extends": [
     "config:recommended"
   ],
   "automerge": true,
-  "ignoreTests": true,
+  "ignoreTests": false,
   "customManagers": [
     {
       "customType": "regex",
