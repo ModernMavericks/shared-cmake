@@ -80,11 +80,21 @@ waits for a green build. That only works if **your repo produces a CI status che
   — this is the one legitimate use; shared-cmake itself does it.
 - Setting `ignoreTests: false` explicitly in a consumer is redundant with the default but harmless
   (defense-in-depth); fine to keep or omit.
-- **Enable the repo's "Allow auto-merge"** — it's off by GitHub default:
-  `gh api -X PATCH repos/OWNER/REPO -f allow_auto_merge=true`. Without it, a green-gated PR merges only on
-  Renovate's next scan (minutes-to-hours after the build goes green); with it, Renovate arms GitHub native
-  auto-merge and the PR merges the instant the build is green. Required for prompt auto-releases once
-  `ignoreTests:false` gates on a build.
+- **For a green-gated PR to merge *promptly*, native auto-merge needs BOTH** (either alone is inert):
+  1. the repo's **"Allow auto-merge"** enabled — off by GitHub default:
+     `gh api -X PATCH repos/OWNER/REPO -f allow_auto_merge=true`; and
+  2. **branch protection on `main` requiring the PR build check** — GitHub only *arms* auto-merge when a
+     required check is pending. Set `strict:false` (no forced rebases) + `enforce_admins:false`
+     (maintainers keep direct-push):
+     ```sh
+     printf '{"required_status_checks":{"strict":false,"contexts":["build"]},"enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null}' \
+       | gh api -X PUT repos/OWNER/REPO/branches/main/protection --input -
+     ```
+  The context is the build **job name** (`build`, `build-macos`, or a job's `name:` string like
+  `Cross-build + compat gate (macos-26)`) — read the exact string from a real check-run first
+  (`gh api repos/OWNER/REPO/commits/main/check-runs --jq '[.check_runs[].name]|unique'`); a typo requires a
+  check that never reports and **blocks every merge**. Without the required check, `allow_auto_merge` is
+  inert and the PR merges only on Renovate's next scan (still gated, just not instant).
 
 **Rules** — automate patch, gate minor/major on a human:
 
@@ -199,8 +209,9 @@ invent a hand-maintained pinned hash when upstream already publishes one** — t
 ## New-project checklist
 
 1. `renovate.json`: extend shared-cmake; add the upstream `customManager` + patch/minor rules; ensure a
-   PR check exists (or set `ignoreTests: true` if no build). Enable the repo's **Allow auto-merge**
-   (`gh api -X PATCH repos/OWNER/REPO -f allow_auto_merge=true`) so green-gated PRs merge promptly.
+   PR check exists (or set `ignoreTests: true` if no build). For *prompt* automerge, enable **Allow
+   auto-merge** AND add **branch protection requiring the build check** — both are needed (see the
+   Renovate section for the exact commands and the typo-blocks-all-merges caveat).
 2. `UPSTREAM_VERSION` (bare); `/VERSION` in `.gitignore`.
 3. `build/lib.sh` (`upstream_version()`), `build/version.sh`, `build/release-notes-file.sh` — copy from
    legacysupport/golang.
