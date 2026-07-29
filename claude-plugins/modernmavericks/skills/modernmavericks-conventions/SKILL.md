@@ -25,10 +25,7 @@ The family has an older/simpler variant and a current/mature variant. **Start fr
 | **mavericks-legacysupport** | the `version.sh`/`lib.sh`/`release-notes-file.sh` scripts verbatim | origin of the auto-cut pattern |
 | swift-toolchain, swift-runtime | the **tag-only-publish** release model (see below) | when you don't auto-cut on main |
 
-Older repos (`ed25519` on `@v4` actions + deprecated `fileMatch`; the pre-green-gate workflows) are being
-brought forward — don't copy their lag.
-
-## shared-cmake: consume, never vendor
+## shared-cmake: consume its facilities, never hand-roll them
 
 - Install via its **action**: `uses: ModernMavericks/shared-cmake/.github/actions/install@v1`. It
   self-registers in the CMake user package registry; consume it downstream with `find_package` — **no
@@ -38,6 +35,36 @@ brought forward — don't copy their lag.
 - Resolve its scripts dir at runtime from the registry:
   `SH="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"`.
 - Reuse a sibling checkout of shared-cmake locally; don't duplicate its logic.
+
+**Use its facilities for 10.9-correctness — do NOT reinvent SDK fetching, floors, build-mode handling,
+updaters, signing, or compat checks:**
+
+| Facility (CMake fn · script) | Does | Don't hand-roll |
+|---|---|---|
+| `mavericks_build_mode` · `MavericksMode` · `mavericks_mode.sh` | selects/asserts the build MODE: native-on-10.9 vs cross-on-modern | arch/host detection |
+| `mavericks_fetch_sdk` · `fetch_sdk.sh` | the pinned, integrity-checked MacOSX10.9 SDK | fetching an SDK yourself |
+| `RequireAppleClang` | enforces Apple `/usr/bin/clang` (cgo/ObjC) | assuming the toolchain |
+| `mavericks_assert_binary_compatible` · `MavericksCompatGuard` · `assert_binary_compatible.sh` | proves a built binary is 10.9-safe (floor + symbol set) | a bespoke compat check |
+| `mavericks_add_updater_app` · `MavericksSparkle` · `stage_updater.sh` | builds/stages the Sparkle updater (self-fetches the framework) | wiring Sparkle by hand |
+| `set_install_floor.sh` | stamps the 10.9.5 install floor on the `.pkg` | editing the pkg Distribution |
+| `sign_and_appcast.sh` · `gen_appcast.sh` | EdDSA-signs + renders the appcast (fetches `ed25519-sign` via `gh`) | rolling your own signing |
+| `mavericks_fetch` · `mavericks_locate` | fetch / locate helpers | ad-hoc `curl` / paths |
+
+## Build equivalence: native-10.9 ≡ modern-cross (core invariant)
+
+The product must run on **10.9**, but **there is no 10.9 build runner in CI** — every project cross-builds
+on a modern Mac. So each project MUST establish that its cross-build equals a native-10.9 build, via
+shared-cmake's facilities rather than trusting the runner:
+
+- Drive the build through the **mode** machinery (`mavericks_build_mode`) so native and cross are the same
+  recipe against the same pinned 10.9 SDK and floor — not two divergent paths.
+- **Gate on the compat guard** (`mavericks_assert_binary_compatible`): fail the build if any shipped binary
+  declares a floor above 10.9 or links a symbol 10.9 lacks. This is the in-CI equivalence proof — every
+  project needs it (or an equivalent gate), since no 10.9 runner validates the output.
+- Where a stronger proof fits, keep a **characterization reference**: commit a trusted native-10.9 artifact
+  and compare the cross-build against it (magic-trackpad2's kext characterization), and/or an emulated
+  smoke (golang's best-effort Rosetta self-test).
+- Back it with **out-of-band re-validation on real 10.9 hardware** before trusting a release.
 
 ## Renovate & automerge
 
@@ -77,7 +104,20 @@ waits for a green build. That only works if **your repo produces a CI status che
 - Track the pin in a dedicated bare file (`UPSTREAM_VERSION` = `1.4.2`) matched whole-file, **or** an
   inline value carrying a marker comment (`… # mavericks-legacysupport`) when it lives in a shared file.
 
+**This customManager is the release trigger** — it's how the package auto-updates when upstream does:
+Renovate bumps the pin → the green-gated build merges → the workflow cuts the release. Author it to fit how
+upstream publishes; if no standard datasource fits (a versioned download URL, a components file), write a
+custom regex manager + the closest datasource (`git-refs`, a `custom.regex` match) — container-tools tracks
+a `components/*/version` file this way. **GitHub Actions pins** (`uses: …@vN`, including `shared-cmake/…@v1`)
+need no custom config: Renovate's built-in github-actions manager updates them through the same green-gate +
+patch-automerge — that's the intended auto-update for the workflow's actions.
+
 ## Versioning
+
+**Two independent bump axes.** The **upstream component** moves when upstream releases: Renovate edits
+`UPSTREAM_VERSION`, and `version.sh auto` cuts `<new>-mavericks.1` (N resets to 1). The **`-mavericks.N`
+suffix** moves for a packaging-only re-release (recipe/patch/updater/CA change, upstream unchanged): via
+`workflow_dispatch local_release=true`, which cuts N+1. Never hand-edit `VERSION` for either — it's computed.
 
 - **`UPSTREAM_VERSION`** — committed, bare (`1.4.2`, no `v`), Renovate-edits it. Read by `build/lib.sh`'s
   `upstream_version()`.

@@ -18,7 +18,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["(^|/)versions\\.sh$", "^\\.github/.+\\.ya?ml$"],
+      "managerFilePatterns": ["/(^|/)versions\\.sh$/", "/^\\.github/.+\\.ya?ml$/"],
       "matchStrings": ["(?<currentValue>[0-9][^\\s#\"']*)\\s*#\\s*mavericks-legacysupport"],
       "depNameTemplate": "mavericks-legacysupport",
       "packageNameTemplate": "ModernMavericks/macports-legacy-support",
