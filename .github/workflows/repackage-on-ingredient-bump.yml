@@ -1,0 +1,66 @@
+name: repackage-on-ingredient-bump
+
+# Reusable: a consumer calls this on push to main (filtered to its ingredient pin paths). If an
+# ingredient pin changed and the repo's own upstream did NOT, cut a -mavericks.(N+1) repackage and
+# tag it -> the repo's existing tag-triggered release.yml publishes. New-upstream (N=1) stays the
+# repo's own job. Forward-only + idempotent.
+
+on:
+  workflow_call:
+    inputs:
+      own-upstream-paths:
+        description: "Newline/space-separated pin paths whose change means a NEW own upstream (N=1) — skipped here."
+        type: string
+        required: false
+        default: ""
+      commit-version:
+        description: "Write+commit VERSION to main before tagging (repos that commit VERSION and enforce tag==VERSION)."
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: release-on-bump          # shared with any release-on-bump.yml so auto-cutters never race
+  cancel-in-progress: false
+
+jobs:
+  repackage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+
+      - name: Install mavericks-shared-cmake (for scripts/repackage-decision.sh)
+        uses: ModernMavericks/shared-cmake/.github/actions/install@v1
+
+      - name: Decide and cut a repackage if an ingredient moved
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWN_UPSTREAM_PATHS: ${{ inputs.own-upstream-paths }}
+          COMMIT_VERSION: ${{ inputs.commit-version }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -eu
+          SCR="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"
+          before="$BEFORE"; case "$before" in ''|0000000000000000000000000000000000000000) before="HEAD~1";; esac
+          CHANGED="$(git diff --name-only "$before" HEAD)"; export CHANGED
+          if [ -f build/version.sh ]; then export VERSION_SH="build/version.sh"; else export CUR_VERSION="$(cat VERSION)"; fi
+          out="$(sh "$SCR/repackage-decision.sh")"
+          echo "decision: $out"
+          case "$out" in SKIP=*) exit 0;; esac
+          NEW="${out#NEW=}"
+          if git ls-remote --exit-code --tags origin "$NEW" >/dev/null 2>&1; then echo "tag $NEW exists"; exit 0; fi
+          git config user.name  modernmavericks-bot
+          git config user.email bot@modernmavericks.dev
+          if [ "$COMMIT_VERSION" = true ]; then
+            NOTES="release-notes/$NEW.md"; mkdir -p release-notes
+            [ -s "$NOTES" ] || printf '## %s\n\nAutomated repackage: a build ingredient updated; rebuilt with the new input.\n' "$NEW" > "$NOTES"
+            printf '%s\n' "$NEW" > VERSION
+            git add VERSION "$NOTES"
+            git commit -m "release: repackage $NEW (build ingredient update)"
+            git push origin HEAD:main
+          fi
+          git tag "$NEW"
+          git push origin "$NEW"
