@@ -185,6 +185,27 @@ Two release models — **pick by how you publish**:
   **guaranteed non-empty** file, so use `build/release-notes-file.sh <TAG> <FULL>` which returns the
   committed note or generates a minimal default to a temp file (the appcast generator rejects empty notes).
 
+## Consuming a ModernMavericks toolchain + auto-propagation
+
+A repo built WITH another MM product (e.g. the go126 toolchain) pins it via a Renovate marker
+(`GO_PKG_REF: <ver>  # mavericks-golang`, tracked by a customManager → `github-releases` on
+`ModernMavericks/golang`). Renovate bumps the pin; the green-gated build rebuilds the product with the new
+toolchain and automerges. Two things to wire deliberately:
+
+- **Download the toolchain asset prefix-tolerantly.** golang's cross `.pkg` was renamed `go126-` →
+  `golang-` at 1.26.5-mavericks.1. Read the pinned release's `SHA256SUMS` and accept EITHER prefix (try
+  `golang-…`, fall back to `go126-…`) so a pin bump across the rename never 404s.
+- **Auto-propagation — `repackage-on-<tool>-bump.yml`.** A toolchain bump alone does NOT auto-cut a
+  consumer release: the consumer's own auto-cut is driven by ITS upstream (N=1), not a dependency. To ship
+  the rebuilt product automatically, add a workflow that triggers on push to `main` touching the file
+  holding the pin, and — only if the `# mavericks-golang` line actually changed
+  (`git diff ${{ github.event.before }} HEAD -- <file> | grep -E '#[[:space:]]*mavericks-golang'`) — cuts a
+  same-upstream `-mavericks.(N+1)` repackage: write `VERSION`, a notes stub, commit, push `main`, tag → the
+  tag triggers the normal publish. Forward-only + idempotent (skip if the tag exists); share a
+  `concurrency.group` with any `release-on-bump.yml` so the two auto-cutters never race. This automates the
+  `-mavericks.N` axis, driven by a dependency instead of a hand-run `local_release`. (The bot's push to
+  `main` works even under branch protection — required status checks gate PR *merges*, not direct pushes.)
+
 ## Verifying the fetched upstream (deviation axis)
 
 Upstream source is **fetched by tag at build time, not vendored**. How you verify it depends on what
