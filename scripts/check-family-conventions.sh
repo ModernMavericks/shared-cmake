@@ -26,6 +26,15 @@ grep -q '^concurrency:' "$REL" \
   || fail "$REL declares no concurrency: — two publishes can race the same tag" \
           "add a concurrency: block with cancel-in-progress: false"
 
+# 1b. ...and it must SERIALIZE local_release dispatches. Keying the group on github.run_id makes every
+# run its own group (concurrency becomes a no-op), so two dispatches — a manual cut racing the
+# ingredient-bump auto-repackage — each compute -mavericks.(N+1) from the same tags and collide on the
+# tag. Dispatches must share ONE group (cancel-in-progress:false): a version-bump lock.
+if awk '/^concurrency:/{f=1;next} /^[^[:space:]#]/{f=0} f' "$REL" | grep -q 'github\.run_id'; then
+  fail "$REL concurrency group keys on github.run_id — local_release dispatches don't serialize, so two can cut the same tag" \
+       "share one dispatch group (e.g. \"…workflow_dispatch' && 'local_release'…\") with cancel-in-progress: false"
+fi
+
 # 2. Tests that exist must run. Hand-enumeration is how they stop running.
 if [ -d tests ] && [ -n "$(ls tests/*.sh tests/*.bats 2>/dev/null || true)" ]; then
   ci_mentions 'run-repo-tests' || ci_mentions 'ctest' \

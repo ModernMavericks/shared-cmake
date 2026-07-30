@@ -243,9 +243,20 @@ Two release models — **pick by how you publish**:
 - **`gh release create "$TAG" dist/* …` mints the tag itself** — no `git tag`/push, **no PAT**. A
   `GITHUB_TOKEN`-created tag can't retrigger the workflow, so no second-hop/loop. (Don't reach for
   `softprops/action-gh-release` + a PAT; `gh release create` is the family way.)
-- **`concurrency: cancel-in-progress: false`** whenever you auto-cut on main — a superseding push must not
-  cancel an in-flight `gh release create`. (Tag-only-publish repos can use `true`; their publish ref is
-  unique.)
+- **`concurrency` — never cancel a publish, and LOCK the version bump.** Use `cancel-in-progress: false`
+  for any run that can publish (auto-cut on main, or a tag) so a superseding push can't kill an in-flight
+  `gh release create`. And a `local_release` **dispatch** must take a version-bump lock: all dispatches
+  share ONE group — keyed on the *event*, **never `github.run_id`** (that makes every run its own group,
+  so the lock is a no-op) — so they queue one-at-a-time. Otherwise two dispatches (a manual cut racing the
+  ingredient-bump auto-repackage) each compute `-mavericks.(N+1)` from the same tags and collide. Keep the
+  dispatch group distinct from the main-push ref group so a dispatch and an ordinary main build still don't
+  cancel each other:
+  ```yaml
+  concurrency:
+    group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && 'local_release' || github.ref }}
+    cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  ```
+  `check-family-conventions.sh` fails a `github.run_id`-keyed group for this reason.
 - Sign/appcast and publish steps gate on `steps.ver.outputs.release == 'yes'`. Fork PRs never touch
   `SPARKLE_PRIVATE_KEY` (they resolve `release=no`).
 - Runner `macos-26` (fallback `macos-15`); `actions/*@v7` on new repos.
@@ -381,7 +392,7 @@ none of which anything detected. A convention that is not checked is a conventio
 
 | Check | Why it is a gate |
 |---|---|
-| `release.yml` declares `concurrency:` | Two publishes racing the same tag is a corrupt release, not a flaky build |
+| `release.yml` declares `concurrency:`, and its group is not keyed on `github.run_id` | Two publishes racing the same tag is a corrupt release; a run_id-keyed group is no lock, so two `local_release` dispatches collide |
 | Test files exist ⇒ some workflow runs them | Nine unrun tests, two silently rotted, is what "we'll wire it up later" looks like |
 | `INGREDIENTS.md` exists | An input nobody documented is an input nobody is watching |
 | No Renovate key the shared preset already sets | A local copy silently stops tracking the preset when the preset changes |
@@ -476,6 +487,8 @@ it here.** A silently dropped increment is how the family drifted in the first p
 - `ignoreTests: false` (default) but no PR check → automerge **stalls forever**. Add the `pull_request`
   gate or set `ignoreTests: true`.
 - Auto-cutting on main with `cancel-in-progress: true` → a rapid second push cancels the release mid-flight.
+- Keying the `concurrency` group on `github.run_id` → every run is its own group, so two `local_release`
+  dispatches (a manual cut racing the ingredient-bump auto-repackage) both cut the same `-mavericks.(N+1)`.
 - Adding a PR trigger without the `rel=no unless main` guard → a PR build tries to publish.
 - Committing `VERSION`, or building assuming it exists → it's gitignored/workflow-written.
 - Reaching for a PAT to create the release tag → `gh release create` mints it under `GITHUB_TOKEN`.
