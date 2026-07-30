@@ -1,13 +1,12 @@
 #!/bin/sh
-# Decide whether a build-ingredient bump warrants a -mavericks.(N+1) repackage, and its version.
-# The caller only runs when an ingredient PIN changed (its push-path filter guarantees that); this
-# script answers: did the OWN upstream also change (-> new-upstream N=1, handled elsewhere: SKIP)?
-# otherwise compute NEW = <current-upstream>-mavericks.(N+1).
-#   env in: CHANGED (newline paths), OWN_UPSTREAM_PATHS (newline paths, may be empty),
-#           VERSION_SH (path to version.sh, optional) | CUR_VERSION (<up>-mavericks.N)
-#   stdout: NEW=<version>  or  SKIP=<reason>
+# Decide whether a build-ingredient bump should DISPATCH a repackage. The caller only runs when an
+# ingredient pin changed (its push-path filter guarantees that); this answers the one remaining
+# question: did the repo's OWN upstream ALSO change? If so it's a new-upstream (N=1), owned by the
+# repo's own new-upstream path -> SKIP. Otherwise -> DISPATCH (the consumer's release workflow, run
+# via workflow_dispatch, computes the -mavericks.(N+1) version and publishes inline).
+#   env in:  CHANGED (newline-separated paths changed this push), OWN_UPSTREAM_PATHS (newline paths, may be empty)
+#   stdout:  DISPATCH  or  SKIP=<reason>
 set -eu
-
 if [ -n "${OWN_UPSTREAM_PATHS:-}" ]; then
   for p in $OWN_UPSTREAM_PATHS; do
     if printf '%s\n' "${CHANGED:-}" | grep -Fxq "$p"; then
@@ -15,14 +14,4 @@ if [ -n "${OWN_UPSTREAM_PATHS:-}" ]; then
     fi
   done
 fi
-
-if [ -n "${VERSION_SH:-}" ]; then
-  full="$(sh "$VERSION_SH" local | sed -n 's/^FULL=//p')"   # local => <up>-mavericks.(maxN+1)
-  [ -n "$full" ] || { echo "SKIP=version.sh-empty"; exit 0; }
-  echo "NEW=$full"; exit 0
-fi
-
-cur="${CUR_VERSION:?repackage-decision: set CUR_VERSION or VERSION_SH}"
-up="${cur%%-mavericks.*}"; n="${cur##*-mavericks.}"
-case "$n" in ''|*[!0-9]*) echo "SKIP=bad-version:$cur"; exit 0;; esac
-echo "NEW=${up}-mavericks.$((n + 1))"
+echo "DISPATCH"
