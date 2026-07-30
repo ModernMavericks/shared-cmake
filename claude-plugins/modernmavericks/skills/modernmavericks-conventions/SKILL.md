@@ -166,6 +166,40 @@ a `components/*/version` file this way. **GitHub Actions pins** (`uses: …@vN`,
 need no custom config: Renovate's built-in github-actions manager updates them through the same green-gate +
 patch-automerge — that's the intended auto-update for the workflow's actions.
 
+## Contributor access: who may push to `main`
+
+A green-gated `main` (above) changes what "giving someone access" means: **the Write role is not
+direct-push to `main`.** A Write collaborator can push branches and open/merge PRs, but a *direct*
+push to `main` is rejected — the required check is unmet and they are not exempt. Direct push is a
+separate, deliberate grant. Decide per person:
+
+- **Gated contributor (the default — use it for outside contributors).** Grant Write; they work
+  branch → PR → green build → merge (auto-merge lands it once green). Their changes stay behind the
+  build gate.
+  ```sh
+  gh api -X PUT repos/OWNER/REPO/collaborators/USER -f permission=push   # invite at Write
+  ```
+- **Direct-push contributor.** They must be **exempt from the required check**, and *how* depends on
+  which protection `main` uses:
+  - **Ruleset** (org- or repo-level; the tell is a push that reports *"bypassed rule violations"*):
+    add them to the ruleset's **bypass list**. Least privilege: give the **Maintain** role a bypass
+    entry with mode **Always**, then grant Maintain — not admin.
+    ```sh
+    gh api -X PUT repos/OWNER/REPO/collaborators/USER -f permission=maintain
+    gh api orgs/ORG/rulesets --jq '.[] | "\(.id)\t\(.name)"'   # find the ruleset id (needs admin:org)
+    gh api orgs/ORG/rulesets/<id> --jq '.bypass_actors'        # inspect the bypass list, then ADD a
+    #   Maintain-role entry (mode Always) via Settings → Rules, or PATCH this ruleset's bypass_actors
+    ```
+  - **Classic branch protection** (`…/branches/main/protection` with `enforce_admins:false`, above):
+    admins are already exempt, so granting **Admin** gives direct push — that is the "maintainers keep
+    direct-push" this doc means.
+- **Bypass mode is load-bearing:** **Always** = may push straight to `main`; **For pull requests only**
+  = may only bypass a *PR merge*, never a raw push.
+- **Org rulesets are org-wide:** editing the bypass list changes `main` across every `mavericks-*` repo
+  unless the ruleset is scoped; use a repo-level ruleset for per-repo control.
+- **The trade-off:** adding someone to bypass removes the build gate for *their own* direct commits —
+  the protection you just built. Default to Write + PR; reserve bypass/admin for trusted maintainers.
+
 ## Versioning
 
 **Two independent bump axes.** The **upstream component** moves when upstream releases: Renovate edits
