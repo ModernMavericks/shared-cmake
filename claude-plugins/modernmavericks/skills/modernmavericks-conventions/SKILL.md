@@ -406,8 +406,9 @@ it here.** A silently dropped increment is how the family drifted in the first p
 - [x] Promote `version.sh` / `lib.sh` / `release-notes-file.sh` into shared-cmake — done 2026-07-30
 - [x] One publisher — done 2026-07-30 with increment 2. The two version *models*
       (derive-from-tags vs committed `VERSION`) remain, and are a real design question, not drift
-- [ ] Encode the patch-only automerge policy in the preset; delete the local overrides (five repos
-      currently inherit bare `automerge: true` and will auto-merge **major** bumps)
+- [x] Automerge policy stated in the preset — done 2026-07-30. **Ship-if-green**: patch, minor and
+      major automerge once the build passes; fix forward in a `-mavericks.N+1` release. Exceptions
+      only where a bad bump would build fine and be wrong, and the gate demands the reason
 - [ ] **North star, not yet designed:** should a product repo carry build machinery at all? One
       declarative config per repo (upstream, verification, binaries, ingredients, updater) that
       shared-cmake turns into the build, package, release, and checks — a repo that cannot express a
