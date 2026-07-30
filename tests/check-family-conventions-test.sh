@@ -67,6 +67,27 @@ printf '{"extends":["github>ModernMavericks/shared-cmake"],"ignoreTests":true}\n
 mkrepo "$work/n"; grep -v 'notes-file' "$work/ok/.github/workflows/release.yml" > "$work/n/.github/workflows/release.yml"
 if (cd "$work/n" && sh "$S" >/dev/null 2>&1); then echo "FAIL no notes should fail"; exit 1; fi
 
+# An automerge exception must say WHY. The family default is ship-if-green (patch, minor and major
+# alike); a repo restricts automerge only where a bad bump would build fine and be wrong -- the case a
+# green build cannot catch. Unexplained, that is indistinguishable from drift.
+mkrepo "$work/am"
+printf '%s\n' '{"extends":["github>ModernMavericks/shared-cmake"],"packageRules":[{"matchDepNames":["x"],"matchUpdateTypes":["minor"],"automerge":false}]}' \
+  > "$work/am/.github/renovate.json"
+if (cd "$work/am" && sh "$S" >/dev/null 2>&1); then echo "FAIL undescribed automerge exception should fail"; exit 1; fi
+(cd "$work/am" && sh "$S" 2>&1 | grep -qi 'automerge') || { echo "FAIL should name the automerge rule"; exit 1; }
+
+# ...with a reason, it passes
+mkrepo "$work/am2"
+printf '%s\n' '{"extends":["github>ModernMavericks/shared-cmake"],"packageRules":[{"description":"A minor bump needs LLVM_BRANCH to follow, which no regex can infer: it would build fine and be wrong.","matchDepNames":["x"],"matchUpdateTypes":["minor"],"automerge":false}]}' \
+  > "$work/am2/.github/renovate.json"
+(cd "$work/am2" && sh "$S" >/dev/null) || { echo "FAIL described exception should pass"; exit 1; }
+
+# a rule that does NOT touch automerge (e.g. allowedVersions) needs no such reason
+mkrepo "$work/am3"
+printf '%s\n' '{"extends":["github>ModernMavericks/shared-cmake"],"packageRules":[{"matchDepNames":["x"],"allowedVersions":"/^v?[0-9.]+$/"}]}' \
+  > "$work/am3/.github/renovate.json"
+(cd "$work/am3" && sh "$S" >/dev/null) || { echo "FAIL non-automerge rule should pass"; exit 1; }
+
 # a repo that publishes via the shared workflow satisfies the notes check: the caller has no
 # --notes-file or body_path of its own, because publish-release.yml owns the body (and fails on an
 # empty one, which is stronger than what this check can see).

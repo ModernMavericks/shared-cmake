@@ -7,8 +7,14 @@
     "'uses: ModernMavericks/shared-cmake/...@v1' and Renovate's native github-actions manager tracks it",
     "-- no custom manager needed for it. This preset does add a manager for mavericks-legacysupport",
     "releases (tag the pinned version with a '# mavericks-legacysupport' comment).",
-    "Automerge waits for a green build (ignoreTests:false): a consumer must produce a CI status check",
-    "on Renovate PRs (e.g. a pull_request-triggered build). A repo with NO build to gate sets ignoreTests:true locally."
+    "AUTOMERGE POLICY: if it builds and passes, it ships -- patch, minor AND major alike. ignoreTests",
+    "is false, so a green build is the gate, and a consumer must produce a CI status check on Renovate",
+    "PRs (a pull_request-triggered build, or push: branches ['**']). A repo with NO build to gate sets",
+    "ignoreTests:true locally. Breakage that gets through is fixed forward in a -mavericks.N+1 release,",
+    "which costs less than a human reviewing every routine bump.",
+    "EXCEPTION RULE: a repo restricts automerge only where a bad bump would BUILD FINE AND BE WRONG --",
+    "the case a green build cannot catch. State that reason in the packageRule's description; an",
+    "exception without one is indistinguishable from drift."
   ],
   "extends": [
     "config:recommended"
@@ -18,8 +24,13 @@
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/(^|/)versions\\.sh$/", "/^\\.github/.+\\.ya?ml$/"],
-      "matchStrings": ["(?<currentValue>[0-9][^\\s#\"']*)\\s*#\\s*mavericks-legacysupport"],
+      "managerFilePatterns": [
+        "/(^|/)versions\\.sh$/",
+        "/^\\.github/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?<currentValue>[0-9][^\\s#\"']*)\\s*#\\s*mavericks-legacysupport"
+      ],
       "depNameTemplate": "mavericks-legacysupport",
       "packageNameTemplate": "ModernMavericks/macports-legacy-support",
       "datasourceTemplate": "github-releases",

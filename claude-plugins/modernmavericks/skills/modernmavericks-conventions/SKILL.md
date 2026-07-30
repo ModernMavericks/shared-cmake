@@ -99,7 +99,22 @@ waits for a green build. That only works if **your repo produces a CI status che
   check that never reports and **blocks every merge**. Without the required check, `allow_auto_merge` is
   inert and the PR merges only on Renovate's next scan (still gated, just not instant).
 
-**Rules** — automate patch, gate minor/major on a human:
+**Automerge policy: if it builds and passes, it ships** — patch, minor **and** major alike. The build
+is the gate (`ignoreTests: false`), and breakage that gets through is fixed forward in a
+`-mavericks.N+1` release, which costs less than a human reviewing every routine bump. Most repos
+therefore need **no `packageRules` at all**.
+
+**Restrict automerge only where a bad bump would BUILD FINE AND BE WRONG** — the case a green build
+cannot catch — and say so in the rule's `description`. `check-family-conventions.sh` fails an
+automerge rule with no description: unexplained, an exception is indistinguishable from drift.
+
+The live example: swift-toolchain gates minor/major Swift bumps because `LLVM_BRANCH` is
+`swift/release/<minor>` and must follow, which no regex can infer; left alone it builds the new Swift
+against the old LLVM build support and succeeds. By contrast golang needs no exception — a Go minor
+bump hits `apply-patches.sh`, which hardcodes `patches/126/`, so the patches fail to apply and the PR
+never merges.
+
+**Manager rules** (what to track, not whether to automerge):
 
 ```json
 "customManagers": [{

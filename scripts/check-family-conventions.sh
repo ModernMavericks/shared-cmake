@@ -51,6 +51,26 @@ if [ -f .github/renovate.json ]; then
   done
 fi
 
+# 4b. The family default is ship-if-green: patch, minor and major automerge once the build passes, and
+#     breakage is fixed forward in a -mavericks.N+1 release. A repo restricts automerge only where a bad
+#     bump would BUILD FINE AND BE WRONG -- the case a green build cannot catch (swift-toolchain: a
+#     minor Swift bump needs LLVM_BRANCH to follow, which no regex can infer). Write that reason down,
+#     or the exception is indistinguishable from drift.
+if [ -f .github/renovate.json ]; then
+  python3 - .github/renovate.json <<'PY' || status=1
+import json, sys
+bad = []
+for r in json.load(open(sys.argv[1])).get('packageRules', []):
+    if 'automerge' in r and not (r.get('description') or '').strip():
+        bad.append(r.get('matchDepNames') or r.get('matchPackageNames') or '(unnamed rule)')
+if bad:
+    print("check-family-conventions: automerge exception with no description: %s" % bad, file=sys.stderr)
+    print("    fix: say why a green build is not enough here (what would build fine and be wrong),", file=sys.stderr)
+    print("         or drop the rule and take the family default (ship-if-green)", file=sys.stderr)
+    sys.exit(1)
+PY
+fi
+
 # 5. Notes must reach readers. An empty Release body ships without anyone noticing (tailscale did,
 #    for every release, including hand-tagged ones that had a committed notes file).
 # publish-release.yml is the strongest evidence: it OWNS the body and fails on an empty one. The other
