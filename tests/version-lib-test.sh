@@ -49,4 +49,14 @@ if sh "$V" sideways >/dev/null 2>&1; then echo "FAIL bad mode should exit non-ze
 out="$(sh "$V" auto)"
 printf '%s\n' "$out" | grep -qx 'FULL=1.26.5-mavericks.9' || { echo "FAIL git tags: $out"; exit 1; }
 
+# A repo that ships parallel upstream lines keeps one UPSTREAM_VERSION per line, so the file is an
+# input rather than a fixed path. (mavericks-golang: lines/126/UPSTREAM_VERSION.)
+mkdir -p "$w/lines/127"
+printf '1.27.0\n' > "$w/lines/127/UPSTREAM_VERSION"
+out="$(MAVERICKS_UPSTREAM_FILE="$w/lines/127/UPSTREAM_VERSION" MAVERICKS_TAGS='' sh "$V" auto)"
+printf '%s\n' "$out" | grep -qx 'FULL=1.27.0-mavericks.1' || { echo "FAIL upstream-file override: $out"; exit 1; }
+# tags from the OTHER line must not affect this one's N
+out="$(MAVERICKS_UPSTREAM_FILE="$w/lines/127/UPSTREAM_VERSION" MAVERICKS_TAGS='1.26.5-mavericks.9' sh "$V" auto)"
+printf '%s\n' "$out" | grep -qx 'FULL=1.27.0-mavericks.1' || { echo "FAIL cross-line tag leak: $out"; exit 1; }
+
 echo "PASS: version-lib"

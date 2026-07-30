@@ -6,9 +6,11 @@
 : "${MAVERICKS_ROOT:=$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 # Bare upstream version (x.y.z, or a date for repos versioned by their pinned commit's date) from the
-# committed UPSTREAM_VERSION file.
+# committed UPSTREAM_VERSION file. $MAVERICKS_UPSTREAM_FILE overrides the path: a repo shipping
+# parallel upstream lines keeps one per line (mavericks-golang: lines/126/UPSTREAM_VERSION), so which
+# file to read is an input rather than a fixed location.
 upstream_version() {
-  tr -d '[:space:]' < "$MAVERICKS_ROOT/UPSTREAM_VERSION"
+  tr -d '[:space:]' < "${MAVERICKS_UPSTREAM_FILE:-$MAVERICKS_ROOT/UPSTREAM_VERSION}"
 }
 
 # Absolute path to the INSTALLED mavericks-shared-cmake scripts dir. $MSC_SCRIPTS when install@v1

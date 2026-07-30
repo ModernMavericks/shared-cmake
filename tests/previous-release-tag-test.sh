@@ -31,4 +31,16 @@ git tag 1.102.0-mavericks.9; git tag 1.102.0-mavericks.10
 out="$(sh "$S")"
 [ "$out" = 1.102.0-mavericks.10 ] || { echo "FAIL N-order: got '$out'"; exit 1; }
 
+# A repo with parallel upstream lines needs the baseline from its OWN line: 1.26.7's notes must diff
+# against 1.26.5, not against a 1.27.0 that shipped in between.
+git tag 1.26.5-mavericks.1; git tag 1.26.7-mavericks.1; git tag 1.27.0-mavericks.1
+out="$(sh "$S" '' '1.26.*')"
+[ "$out" = 1.26.7-mavericks.1 ] || { echo "FAIL line filter: got '$out'"; exit 1; }
+out="$(sh "$S" 1.26.7-mavericks.1 '1.26.*')"
+[ "$out" = 1.26.5-mavericks.1 ] || { echo "FAIL line filter + exclude: got '$out'"; exit 1; }
+# no filter still means "newest overall" across every line -- 1.102.0 outranks 1.27.0 (sort -V), which
+# is exactly why a repo with parallel lines must pass the filter rather than trust the default.
+out="$(sh "$S")"
+[ "$out" = 1.102.0-mavericks.10 ] || { echo "FAIL unfiltered newest: got '$out'"; exit 1; }
+
 echo "PASS: previous-release-tag"
