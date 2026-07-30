@@ -31,7 +31,10 @@ The family has an older/simpler variant and a current/mature variant. **Start fr
   self-registers in the CMake user package registry; consume it downstream with `find_package` — **no
   `CMAKE_PREFIX_PATH`, no vendored copy, no hand-run `cmake --install`.**
 - `@v1` is the **moving major tag**; Renovate's native github-actions manager tracks it — **no custom
-  manager, no SHA pin, no marker comment** for it.
+  manager, no SHA pin, no marker comment** for it. It moves **automatically**: shared-cmake's `tag.yml`
+  runs on every push to `main`, cuts the immutable `vX.Y.Z` from `VERSION`, and fast-forwards `@v1` to
+  that commit. So a shared-cmake change reaches consumers by **pushing `main`** — never move `@v1` by
+  hand, and there's no separate "publish" step to run.
 - **After `install@v1`, use `$MSC_SCRIPTS`** — the action exports the installed scripts dir. Do NOT
   re-derive it with `SH="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"`;
   that incantation appeared 11 times across the family before it was exported once. (It remains valid
