@@ -215,6 +215,19 @@ toolchain and automerges. Two things to wire deliberately:
   fix repairs any `release-on-bump.yml` that relies on a pushed tag). CI-only bumps (`.github/**` action
   `uses:`) aren't in the caller's `paths:`, so they never repackage. This automates the `-mavericks.N` axis,
   driven by a dependency instead of a hand-run `local_release`.
+- **In a committed-`VERSION` repo, derive the repackage's N from TAGS, not from `VERSION`.** A
+  dispatch-cut version is published without being committed back (the tag is minted by
+  `action-gh-release` via `tag_name` + `target_commitish`), so reading N from the file recomputes the
+  same N+1 on the next ingredient bump and **overwrites that release** instead of cutting the next one.
+  Take the highest existing `<upstream>-mavericks.*` tag (needs `fetch-depth: 0`) — idempotent, no
+  commit-back. Repos deriving from tags already (`version.sh local`) are fine by construction.
+- **Track every trackable ingredient; document the ones you can't.** An ingredient with neither a
+  Renovate customManager nor a written reason is a silent staleness hole — the product ships built from
+  an input nobody is watching. Give each repo an `INGREDIENTS.md`: every input baked into the artifact,
+  where it's pinned, its Renovate status, and what a bump does. Where no clean datasource exists (a
+  rolling URL with no version, a moving `@v1` tag), say so and say what compensates — vendoring plus a
+  hash pin keeps builds reproducible even when nothing is watching upstream. Don't invent a fragile
+  tracker (scraping a download page for a date) just to fill a cell.
 
 ## Verifying the fetched upstream (deviation axis)
 
@@ -250,7 +263,11 @@ invent a hand-maintained pinned hash when upstream already publishes one** — t
    create`; `cancel-in-progress: false` if auto-cutting.
 5. `release-notes/README.md`; Sparkle updater target; `SPARKLE_PRIVATE_KEY` secret.
 6. Choose the upstream-verification method; note it if it deviates from a sibling.
-7. Check in `.claude/settings.json` pointing at the `modernmavericks` marketplace (hosted in
+7. If the repo bakes in build ingredients (anything it's built WITH, not the upstream it ports): make
+   each pin a **file**, give each a Renovate customManager, add the `repackage-on-ingredient-bump`
+   caller, and record the lot in `INGREDIENTS.md` — including any ingredient you deliberately left
+   untracked and why. No file-based ingredient pins → no caller (say that in `INGREDIENTS.md` too).
+8. Check in `.claude/settings.json` pointing at the `modernmavericks` marketplace (hosted in
    `mavericks-shared-cmake`) so contributors' agents load these conventions — do NOT copy the SKILL.md:
    ```json
    {"extraKnownMarketplaces": {"modernmavericks": {"source": {"source": "github", "repo": "ModernMavericks/shared-cmake"}}},
