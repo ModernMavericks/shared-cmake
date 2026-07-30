@@ -282,6 +282,18 @@ none of which anything detected. A convention that is not checked is a conventio
 | No Renovate key the shared preset already sets | A local copy silently stops tracking the preset when the preset changes |
 | The release publishes a notes body | An empty Release body ships unnoticed — tailscale's did, on every release |
 
+Wire it with the reusable workflow — three lines, and it never changes when a check is added:
+
+```yaml
+jobs:
+  conventions:
+    uses: ModernMavericks/shared-cmake/.github/workflows/family-conventions.yml@v1
+```
+
+It checks out shared-cmake itself rather than expecting `$MSC_SCRIPTS`, so it also gates repos that do
+not consume shared-cmake's CMake side at all (swift-toolchain builds and mirrors — no install step, no
+updater, no `.pkg`). A gate only some repos can run is not a family convention.
+
 Adding a check is cheap; adding one **without its rule here** is a trap for the next person. Land both
 in the same commit.
 
