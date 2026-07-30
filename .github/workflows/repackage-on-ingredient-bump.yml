@@ -1,9 +1,10 @@
 name: repackage-on-ingredient-bump
 
 # Reusable: a consumer calls this on push to main (filtered to its ingredient pin paths). If an
-# ingredient pin changed and the repo's own upstream did NOT, cut a -mavericks.(N+1) repackage and
-# tag it -> the repo's existing tag-triggered release.yml publishes. New-upstream (N=1) stays the
-# repo's own job. Forward-only + idempotent.
+# ingredient pin changed and the repo's own upstream did NOT, DISPATCH the consumer's release
+# workflow — workflow_dispatch IS triggerable by GITHUB_TOKEN, unlike a pushed tag — with
+# local_release=true, so the consumer computes -mavericks.(N+1) and publishes inline. New-upstream
+# (N=1) stays the repo's own job.
 
 on:
   workflow_call:
@@ -13,21 +14,26 @@ on:
         type: string
         required: false
         default: ""
-      commit-version:
-        description: "Write+commit VERSION to main before tagging (repos that commit VERSION and enforce tag==VERSION)."
-        type: boolean
+      dispatch-workflow:
+        description: "The consumer release workflow to dispatch."
+        type: string
         required: false
-        default: false
+        default: "release.yml"
+      dispatch-field:
+        description: "A -f key=value passed to the dispatched workflow to request a repackage."
+        type: string
+        required: false
+        default: "local_release=true"
 
 concurrency:
-  group: release-on-bump          # shared with any release-on-bump.yml so auto-cutters never race
+  group: release-on-bump
   cancel-in-progress: false
 
 jobs:
   repackage:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
@@ -35,32 +41,20 @@ jobs:
       - name: Install mavericks-shared-cmake (for scripts/repackage-decision.sh)
         uses: ModernMavericks/shared-cmake/.github/actions/install@v1
 
-      - name: Decide and cut a repackage if an ingredient moved
+      - name: Dispatch a repackage if a build ingredient (not own-upstream) moved
         env:
           GH_TOKEN: ${{ github.token }}
           OWN_UPSTREAM_PATHS: ${{ inputs.own-upstream-paths }}
-          COMMIT_VERSION: ${{ inputs.commit-version }}
           BEFORE: ${{ github.event.before }}
+          DISPATCH_WORKFLOW: ${{ inputs.dispatch-workflow }}
+          DISPATCH_FIELD: ${{ inputs.dispatch-field }}
         run: |
           set -eu
           SCR="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"
           before="$BEFORE"; case "$before" in ''|0000000000000000000000000000000000000000) before="HEAD~1";; esac
           CHANGED="$(git diff --name-only "$before" HEAD)"; export CHANGED
-          if [ -f build/version.sh ]; then export VERSION_SH="build/version.sh"; else export CUR_VERSION="$(cat VERSION)"; fi
           out="$(sh "$SCR/repackage-decision.sh")"
           echo "decision: $out"
           case "$out" in SKIP=*) exit 0;; esac
-          NEW="${out#NEW=}"
-          if git ls-remote --exit-code --tags origin "$NEW" >/dev/null 2>&1; then echo "tag $NEW exists"; exit 0; fi
-          git config user.name  modernmavericks-bot
-          git config user.email bot@modernmavericks.dev
-          if [ "$COMMIT_VERSION" = true ]; then
-            NOTES="release-notes/$NEW.md"; mkdir -p release-notes
-            [ -s "$NOTES" ] || printf '## %s\n\nAutomated repackage: a build ingredient updated; rebuilt with the new input.\n' "$NEW" > "$NOTES"
-            printf '%s\n' "$NEW" > VERSION
-            git add VERSION "$NOTES"
-            git commit -m "release: repackage $NEW (build ingredient update)"
-            git push origin HEAD:main
-          fi
-          git tag "$NEW"
-          git push origin "$NEW"
+          echo "dispatching $DISPATCH_WORKFLOW on main with -f $DISPATCH_FIELD (consumer cuts+publishes the repackage inline)"
+          gh workflow run "$DISPATCH_WORKFLOW" --repo "$GITHUB_REPOSITORY" --ref main -f "$DISPATCH_FIELD"
