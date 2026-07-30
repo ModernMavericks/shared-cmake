@@ -23,12 +23,18 @@ trap 'rm -rf "$tmp"' EXIT
 bullets="$tmp/bullets"
 : > "$bullets"
 
-# components/golang/version -> "golang"; anything else keeps its path.
+# components/golang/version -> "golang"; a patch -> its filename; anything else keeps its path.
 pin_name() {
   case "$1" in
     components/*/version) p="${1#components/}"; printf '%s' "${p%/version}" ;;
+    *.patch) printf '%s' "${1##*/}" ;;
     *) printf '%s' "$1" ;;
   esac
+}
+
+# The Subject: line of a mail-formatted patch, minus any [PATCH n/m] prefix. Empty for a plain diff.
+patch_subject() {
+  sed -n 's/^Subject:[[:space:]]*//p' | sed 's/^\[PATCH[^]]*\][[:space:]]*//' | head -1
 }
 
 # A 64-character diff of two hashes tells a reader nothing; 12 characters identifies which is which.
@@ -65,11 +71,23 @@ for path in "$@"; do
 
   # Absent at the previous release: a newly introduced pin.
   if ! oldsize="$(git cat-file -s "$prev:$path" 2>/dev/null)"; then
-    if [ "$newsize" -lt 256 ]; then
-      printf -- '- **%s**: added (%s)\n' "$(pin_name "$path")" "$(head -1 "$path")" >> "$bullets"
-    else
-      printf -- '- **%s**: added\n' "$(pin_name "$path")" >> "$bullets"
-    fi
+    case "$path" in
+      *.patch)
+        sub="$(patch_subject < "$path")"
+        if [ -n "$sub" ]; then
+          printf -- '- **%s**: added ("%s")\n' "$(pin_name "$path")" "$sub" >> "$bullets"
+        else
+          printf -- '- **%s**: added\n' "$(pin_name "$path")" >> "$bullets"
+        fi
+        ;;
+      *)
+        if [ "$newsize" -lt 256 ]; then
+          printf -- '- **%s**: added (%s)\n' "$(pin_name "$path")" "$(head -1 "$path")" >> "$bullets"
+        else
+          printf -- '- **%s**: added\n' "$(pin_name "$path")" >> "$bullets"
+        fi
+        ;;
+    esac
     continue
   fi
 
@@ -96,6 +114,24 @@ for path in "$@"; do
         grep -q "^$key	" "$tmp/new" \
           || printf -- '- **%s**: removed\n' "$key" >> "$bullets"
       done < "$tmp/old"
+      ;;
+    *.patch)
+      # A patch is an ingredient too -- it is baked into the product -- but a byte delta says nothing
+      # about one. Report what a reader can act on: what the patch claims to do, and how much moved.
+      git show "$prev:$path" > "$tmp/oldpatch"
+      oldsub="$(patch_subject < "$tmp/oldpatch")"
+      newsub="$(patch_subject < "$path")"
+      a="$(diff "$tmp/oldpatch" "$path" | grep -c '^>' || true)"
+      d="$(diff "$tmp/oldpatch" "$path" | grep -c '^<' || true)"
+      if [ -n "$oldsub" ] && [ -n "$newsub" ] && [ "$oldsub" != "$newsub" ]; then
+        printf -- '- **%s**: "%s" -> "%s" (+%s/-%s lines)\n' \
+          "$(pin_name "$path")" "$oldsub" "$newsub" "$a" "$d" >> "$bullets"
+      elif [ -n "$newsub" ]; then
+        printf -- '- **%s**: updated ("%s", +%s/-%s lines)\n' \
+          "$(pin_name "$path")" "$newsub" "$a" "$d" >> "$bullets"
+      else
+        printf -- '- **%s**: updated (+%s/-%s lines)\n' "$(pin_name "$path")" "$a" "$d" >> "$bullets"
+      fi
       ;;
     *)
       oldlines="$(git show "$prev:$path" | wc -l | tr -d ' ')"

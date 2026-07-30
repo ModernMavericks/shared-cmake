@@ -225,7 +225,9 @@ toolchain and automerges. Two things to wire deliberately:
   input — "rebuilt with the current ingredients (see components/)" tells a reader nothing.
   `ingredient-notes.sh <prev-tag> <pin>...` renders `- **name**: old -> new` for whole-file pins,
   per-key bullets for `KEY=VALUE` pins (literals only — a rewritten `$(...)` is a code change, not an
-  ingredient change — and it reports keys that were *removed*), and a size delta for opaque blobs.
+  ingredient change — and it reports keys that were *removed*), subject + `+N/-M lines` for `*.patch`
+  pins (a patch is baked into the product, and a byte count says nothing about one), and a size delta
+  for other opaque blobs.
   `previous-release-tag.sh` supplies the baseline (`sort -V`, so 1.102.0 > 1.98.8) and
   `ingredient-pins.sh` the pin list — **derived from the caller's own `paths:` minus
   `own-upstream-paths`**, so the repackage trigger and the notes cannot drift. Append the section to the

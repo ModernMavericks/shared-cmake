@@ -87,4 +87,63 @@ printf '%s\n' "$out" | LC_ALL=C grep -q '[^ -~]' \
 out="$(sh "$S" 20260727-mavericks.2 components/golang/version nosuch/file 2>/dev/null)"
 printf '%s\n' "$out" | grep -q 'golang' || { echo "FAIL missing-path skip: $out"; exit 1; }
 
+# --- patch pins ---------------------------------------------------------------------------------
+# A .patch IS an ingredient (it is baked into the product), but "updated (N -> M bytes)" says nothing
+# useful about one. Report what a reader can act on: the subject line, and how much moved.
+work2="$(mktemp -d)"; cd "$work2"
+git init -q -b main .
+git config user.email t@example.com; git config user.name tester
+mkdir -p patches
+cat > patches/0001-keyserver.patch <<'PATCH'
+From abc123 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] boot2docker: fetch kernel keys over HTTPS
+---
+ Dockerfile | 2 +-
+@@ -1,2 +1,2 @@
+-old line
++new line
+PATCH
+cat > patches/0002-plain.patch <<'PATCH'
+--- a/x
++++ b/x
+@@ -1 +1 @@
+-a
++b
+PATCH
+git add -A; git commit -qm base; git tag 1.0.0-mavericks.1
+
+# content moves, subject unchanged
+printf '+another line\n' >> patches/0001-keyserver.patch
+# a patch with no Subject: header still reports a line delta
+printf '+extra\n' >> patches/0002-plain.patch
+# a brand-new patch
+cat > patches/0003-new.patch <<'PATCH'
+Subject: [PATCH] modernize the tls stack
+---
+ y | 1 +
+PATCH
+
+out="$(sh "$S" 1.0.0-mavericks.1 patches/0001-keyserver.patch patches/0002-plain.patch patches/0003-new.patch)"
+printf '%s\n' "$out" | grep -q -- '- \*\*0001-keyserver.patch\*\*: updated ("boot2docker: fetch kernel keys over HTTPS", +1/-0 lines)' \
+  || { echo "FAIL patch updated: $out"; exit 1; }
+printf '%s\n' "$out" | grep -q -- '- \*\*0002-plain.patch\*\*: updated (+1/-0 lines)' \
+  || { echo "FAIL subject-less patch: $out"; exit 1; }
+printf '%s\n' "$out" | grep -q -- '- \*\*0003-new.patch\*\*: added ("modernize the tls stack")' \
+  || { echo "FAIL patch added: $out"; exit 1; }
+# a patch is never reported as a byte-size delta
+printf '%s\n' "$out" | grep -q 'bytes' \
+  && { echo "FAIL patch reported as opaque bytes: $out"; exit 1; }
+
+# a rewritten patch that changes what it DOES: say so, old subject -> new subject
+cat > patches/0001-keyserver.patch <<'PATCH'
+From abc123 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] boot2docker: import kernel keys from a pinned bundle
+---
+ Dockerfile | 2 +-
+PATCH
+out="$(sh "$S" 1.0.0-mavericks.1 patches/0001-keyserver.patch)"
+printf '%s\n' "$out" | grep -q -- '- \*\*0001-keyserver.patch\*\*: "boot2docker: fetch kernel keys over HTTPS" -> "boot2docker: import kernel keys from a pinned bundle"' \
+  || { echo "FAIL patch subject change: $out"; exit 1; }
+cd "$work"; rm -rf "$work2"
+
 echo "PASS: ingredient-notes"
