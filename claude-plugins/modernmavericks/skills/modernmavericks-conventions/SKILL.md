@@ -359,6 +359,11 @@ it here.** A silently dropped increment is how the family drifted in the first p
       two is right, given that only committed-`VERSION` repos need inline tag minting
 - [ ] Encode the patch-only automerge policy in the preset; delete the local overrides (five repos
       currently inherit bare `automerge: true` and will auto-merge **major** bumps)
+- [ ] **North star, not yet designed:** should a product repo carry build machinery at all? One
+      declarative config per repo (upstream, verification, binaries, ingredients, updater) that
+      shared-cmake turns into the build, package, release, and checks — a repo that cannot express a
+      difference cannot drift into one. The hard part is where genuine difference lives
+      (container-tools has no single upstream; swift-toolchain ships no end-user `.pkg`)
 
 ## Common mistakes
 
