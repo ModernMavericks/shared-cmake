@@ -371,11 +371,10 @@ in shared-cmake (that dir is gitignored, so this list is the durable half). **Wh
 it here.** A silently dropped increment is how the family drifted in the first place.
 
 - [x] Shared scripts dir (`$MSC_SCRIPTS`), shared test runner, conventions gate — done 2026-07-30
-- [ ] Reusable `publish-release.yml` — four bespoke publish jobs become ~6-line callers, and "notes
-      reach the Release body" stops being per-repo wiring that can silently be omitted
+- [x] Reusable `publish-release.yml` — done 2026-07-30; all seven repos publish through it
 - [ ] Promote `version.sh` / `lib.sh` / `release-notes-file.sh` into shared-cmake
-- [ ] One publisher, one version model (`gh release create` vs `action-gh-release`) — or write down why
-      two is right, given that only committed-`VERSION` repos need inline tag minting
+- [x] One publisher — done 2026-07-30 with increment 2. The two version *models*
+      (derive-from-tags vs committed `VERSION`) remain, and are a real design question, not drift
 - [ ] Encode the patch-only automerge policy in the preset; delete the local overrides (five repos
       currently inherit bare `automerge: true` and will auto-merge **major** bumps)
 - [ ] **North star, not yet designed:** should a product repo carry build machinery at all? One
