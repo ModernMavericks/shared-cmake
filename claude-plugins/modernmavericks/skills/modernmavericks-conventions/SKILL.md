@@ -221,6 +221,18 @@ toolchain and automerges. Two things to wire deliberately:
   same N+1 on the next ingredient bump and **overwrites that release** instead of cutting the next one.
   Take the highest existing `<upstream>-mavericks.*` tag (needs `fetch-depth: 0`) — idempotent, no
   commit-back. Repos deriving from tags already (`version.sh local`) are fine by construction.
+- **Say which ingredient moved.** A repackage exists to ship a new input, so its notes must name that
+  input — "rebuilt with the current ingredients (see components/)" tells a reader nothing.
+  `ingredient-notes.sh <prev-tag> <pin>...` renders `- **name**: old -> new` for whole-file pins,
+  per-key bullets for `KEY=VALUE` pins (literals only — a rewritten `$(...)` is a code change, not an
+  ingredient change — and it reports keys that were *removed*), and a size delta for opaque blobs.
+  `previous-release-tag.sh` supplies the baseline (`sort -V`, so 1.102.0 > 1.98.8) and
+  `ingredient-pins.sh` the pin list — **derived from the caller's own `paths:` minus
+  `own-upstream-paths`**, so the repackage trigger and the notes cannot drift. Append the section to the
+  notes file and publish that ONE file as both the appcast `--notes-file` and the Release `body_path`
+  (an empty Release body is easy to ship without noticing — tailscale did, for every release).
+  `check-ingredient-pins.sh` in CI fails a declaration whose globs match nothing. Notes are prose:
+  every call site uses `|| true`, but warn on stderr rather than dropping the section in silence.
 - **Track every trackable ingredient; document the ones you can't.** An ingredient with neither a
   Renovate customManager nor a written reason is a silent staleness hole — the product ships built from
   an input nobody is watching. Give each repo an `INGREDIENTS.md`: every input baked into the artifact,
@@ -267,6 +279,8 @@ invent a hand-maintained pinned hash when upstream already publishes one** — t
    each pin a **file**, give each a Renovate customManager, add the `repackage-on-ingredient-bump`
    caller, and record the lot in `INGREDIENTS.md` — including any ingredient you deliberately left
    untracked and why. No file-based ingredient pins → no caller (say that in `INGREDIENTS.md` too).
+   Wire `ingredient-notes.sh` into the notes step and `check-ingredient-pins.sh` into CI so releases
+   state which ingredient moved.
 8. Check in `.claude/settings.json` pointing at the `modernmavericks` marketplace (hosted in
    `mavericks-shared-cmake`) so contributors' agents load these conventions — do NOT copy the SKILL.md:
    ```json
