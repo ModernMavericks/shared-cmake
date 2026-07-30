@@ -306,6 +306,10 @@ in the same commit.
 - **A test that cannot run yet exits 77 to SKIP**, the same idiom as ctest's `SKIP_RETURN_CODE 77`.
   Guard on the artifact you need (`[ -d "$OUT" ] || { echo "not built — skipping"; exit 77; }`) rather
   than failing a CI run that was never going to have it.
+- **`bats` is available on any runner that installs shared-cmake** — `install@v1` installs it if the
+  runner lacks it. So a `.bats` file is executed, not politely skipped; a skipped assertion is one
+  nobody is checking, which is the hole that let two tests rot. Locally, bats missing still reports
+  SKIP rather than failing your run.
 - **Never hand-enumerate test files in CI.** That is how `macports-legacy-support` ended up with nine
   test files it had not run since each was written — two of which had rotted: one asserting Renovate's
   pre-migration `fileMatch` key, one checking an `.icns` filename that changed when the repo was

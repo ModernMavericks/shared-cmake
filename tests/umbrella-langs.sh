@@ -4,6 +4,9 @@
 # no-op gate for LANGUAGES NONE, and does not touch a project's CMAKE_OSX_* (multi-arch
 # safe). Needs Apple's clang at /usr/bin/clang (present on 10.9 and modern macOS).
 set -eu
+# ctest passes the source dir (see add_test). Called bare -- as the shared test runner does when it
+# globs tests/*.sh -- there is nothing to include: 77 = SKIP, not a failure.
+[ "$#" -ge 1 ] || { echo "no source dir given (ctest supplies it) -- skipping" >&2; exit 77; }
 SRC="${1:?usage: umbrella-langs.sh <mavericks-shared-cmake source dir>}"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 CC=/usr/bin/clang

@@ -4,6 +4,9 @@
 # neither). The install dir contains a SPACE (/Library/Application Support/...), so this also pins
 # that the rendered paths survive it. Dependency-free; no real Sparkle app needed.
 set -eu
+# ctest passes the source root (see add_test in CMakeLists.txt). Called bare -- as the shared test
+# runner does when it globs tests/*.sh -- there is no root to test against: 77 = SKIP, not a failure.
+[ "$#" -ge 1 ] || { echo "no source root given (ctest supplies it) -- skipping" >&2; exit 77; }
 ROOT="$1"
 T=$(mktemp -d "${TMPDIR:-/tmp}/mav-stageupd.XXXXXX")
 trap 'rm -rf "$T"' EXIT

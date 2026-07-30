@@ -4,6 +4,9 @@
 # signer -- the real ed25519-sign lives in mavericks-ed25519; this exercises the orchestration, not the
 # crypto (so no compiler or network fetch needed).
 set -eu
+# ctest passes the source root (see add_test in CMakeLists.txt). Called bare -- as the shared test
+# runner does when it globs tests/*.sh -- there is no root to test against: 77 = SKIP, not a failure.
+[ "$#" -ge 1 ] || { echo "no source root given (ctest supplies it) -- skipping" >&2; exit 77; }
 ROOT="$1"
 T=$(mktemp -d "${TMPDIR:-/tmp}/mav-signappcast.XXXXXX")
 trap 'rm -rf "$T"' EXIT

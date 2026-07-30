@@ -1,0 +1,39 @@
+name: CI
+
+# shared-cmake had no CI at all: the repo that tells the family "tests that exist must run" ran none of
+# its own. That matters more here than anywhere else — these scripts reach all seven product repos
+# through the moving @v1 tag, so a break here ships everywhere before anyone notices.
+#
+# Two invocations because there are two kinds of test:
+#   - ctest drives the parameterized ones (add_test passes each a source/config dir)
+#   - run-repo-tests.sh takes the standalone tests/*-test.sh and *.bats suites
+# The overlap is harmless: the ctest-owned scripts exit 77 (SKIP) when called without their argument.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-26   # the CMake modules gate on Apple clang; Linux cannot exercise them
+    steps:
+      - uses: actions/checkout@v7
+
+      # Installs shared-cmake (this repo) and, incidentally, bats — which is what makes the *.bats
+      # suites below actually run instead of reporting SKIP.
+      - name: Install mavericks-shared-cmake (self)
+        uses: ./.github/actions/install
+
+      - name: ctest (parameterized suites)
+        run: |
+          cmake -S . -B build
+          ctest --test-dir build --output-on-failure
+
+      - name: Standalone test suites
+        run: sh scripts/run-repo-tests.sh

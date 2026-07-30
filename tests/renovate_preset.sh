@@ -16,9 +16,11 @@ assert "extractVersionTemplate" in m, "must strip the leading v"
 # no Python (?P<...>) syntax anywhere in the manager -- Renovate uses (?<...>)
 assert "(?P<" not in json.dumps(m), "manager must use Renovate (?<name>...) syntax, not Python (?P<name>...)"
 
-# fileMatch must be the anchored regexes (NOT bare globs)
-fm = m["fileMatch"]
-assert "(^|/)versions\\.sh$" in fm, "fileMatch must contain the anchored (^|/)versions\\.sh$ regex, not a glob"
+# The patterns must be anchored regexes (NOT bare globs). Renovate renamed fileMatch ->
+# managerFilePatterns and wraps each pattern as a regex literal (/.../); this assertion still said
+# fileMatch long after the preset moved on, and nothing ran it to notice.
+fm = m["managerFilePatterns"]
+assert "/(^|/)versions\\.sh$/" in fm, "managerFilePatterns must contain the anchored /(^|/)versions\\.sh$/ regex, not a glob"
 
 # matchStrings must name-capture via Renovate syntax and, semantically, capture the version
 pat = m["matchStrings"][0]
