@@ -80,8 +80,9 @@ waits for a green build. That only works if **your repo produces a CI status che
   build runs on the bump PR. This is what Renovate's automerge waits on.
 - A repo with **no build to gate** must set `ignoreTests: true` locally (opt back into blind automerge)
   — this is the one legitimate use; shared-cmake itself does it.
-- Setting `ignoreTests: false` explicitly in a consumer is redundant with the default but harmless
-  (defense-in-depth); fine to keep or omit.
+- **Do not restate `ignoreTests: false` locally** — the preset sets it, and a local copy silently stops
+  tracking the preset the day the preset changes. `check-family-conventions.sh` fails on it. Overriding
+  with a *different* value (`true`, above) stays legal: that is a decision, not a duplicate.
 - **For a green-gated PR to merge *promptly*, native auto-merge needs BOTH** (either alone is inert):
   1. the repo's **"Allow auto-merge"** enabled — off by GitHub default:
      `gh api -X PATCH repos/OWNER/REPO -f allow_auto_merge=true`; and
@@ -266,6 +267,24 @@ invent a hand-maintained pinned hash when upstream already publishes one** — t
 - `mavericks_add_updater_app()` self-fetches the Sparkle framework at configure time; signing/appcast use
   the shared `sign_and_appcast.sh` (fetches `ed25519-sign` via `gh` → needs `GH_TOKEN`).
 
+## Family conventions (checked, not just written down)
+
+`sh "$MSC_SCRIPTS/check-family-conventions.sh"` runs in every product repo's CI and **fails the build**
+on any of these. It exists because seven repos started from one shape and drifted into two publishers,
+four concurrency policies, three repos not running their own tests, and 11 copies of one incantation —
+none of which anything detected. A convention that is not checked is a convention that drifts.
+
+| Check | Why it is a gate |
+|---|---|
+| `release.yml` declares `concurrency:` | Two publishes racing the same tag is a corrupt release, not a flaky build |
+| Test files exist ⇒ some workflow runs them | Nine unrun tests, two silently rotted, is what "we'll wire it up later" looks like |
+| `INGREDIENTS.md` exists | An input nobody documented is an input nobody is watching |
+| No Renovate key the shared preset already sets | A local copy silently stops tracking the preset when the preset changes |
+| The release publishes a notes body | An empty Release body ships unnoticed — tailscale's did, on every release |
+
+Adding a check is cheap; adding one **without its rule here** is a trap for the next person. Land both
+in the same commit.
+
 ## Running a repo's tests
 
 - **Use the shared runner: `sh "$MSC_SCRIPTS/run-repo-tests.sh" [ctest-preset]`.** It runs every
@@ -299,6 +318,9 @@ invent a hand-maintained pinned hash when upstream already publishes one** — t
    untracked and why. No file-based ingredient pins → no caller (say that in `INGREDIENTS.md` too).
    Wire `ingredient-notes.sh` into the notes step and `check-ingredient-pins.sh` into CI so releases
    state which ingredient moved.
+9. Call `check-family-conventions.sh` in CI, and run the suite with `run-repo-tests.sh`. The gate fails
+   on: no `concurrency:`; test files nothing runs; no `INGREDIENTS.md`; a Renovate key the preset
+   already sets; a release that publishes no notes body.
 8. Check in `.claude/settings.json` pointing at the `modernmavericks` marketplace (hosted in
    `mavericks-shared-cmake`) so contributors' agents load these conventions — do NOT copy the SKILL.md:
    ```json
