@@ -17,6 +17,12 @@ setup() {
   "$CC" -arch x86_64 -mmacosx-version-min=10.9 "$WORK/shim.c" -o "$WORK/shim" 2>/dev/null || true
   printf 'extern int mav_test_post109(void);\nint main(void){return mav_test_post109();}\n' > "$WORK/leak.c"
   "$CC" -arch x86_64 -mmacosx-version-min=10.9 -Wl,-undefined,dynamic_lookup "$WORK/leak.c" -o "$WORK/leak" 2>/dev/null || true
+  # ObjC fixtures: a post-10.9 selector (labelColor, 10.10+) vs a 10.9-safe one (blackColor). These
+  # dispatch via objc_msgSend, so nm can't see them -- the selector scan must catch labelColor.
+  printf '#import <AppKit/AppKit.h>\nint main(void){(void)[NSColor labelColor];return 0;}\n' > "$WORK/sel_bad.m"
+  "$CC" -arch x86_64 -mmacosx-version-min=10.9 -framework AppKit "$WORK/sel_bad.m" -o "$WORK/sel_bad" 2>/dev/null || true
+  printf '#import <AppKit/AppKit.h>\nint main(void){(void)[NSColor blackColor];return 0;}\n' > "$WORK/sel_ok.m"
+  "$CC" -arch x86_64 -mmacosx-version-min=10.9 -framework AppKit "$WORK/sel_ok.m" -o "$WORK/sel_ok" 2>/dev/null || true
 }
 teardown() { rm -rf "$WORK"; }
 
@@ -42,4 +48,23 @@ teardown() { rm -rf "$WORK"; }
   [ "$HAVE_X8609" = 1 ] || skip "host cannot emit x86_64/10.9"
   run env MAVERICKS_REQUIRE_DEFINED_SYMBOLS='_mav_test_shim' sh "$GUARD" "$WORK/clean"
   [ "$status" -ne 0 ]
+}
+
+@test "post-10.9 ObjC selector (labelColor) is caught -- nm can't see it" {
+  [ -f "$WORK/sel_bad" ] || skip "sel_bad fixture did not build (no AppKit?)"
+  run sh "$GUARD" "$WORK/sel_bad"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *labelColor* ]]
+}
+
+@test "a 10.9-safe selector (blackColor) passes the selector scan" {
+  [ -f "$WORK/sel_ok" ] || skip "sel_ok fixture did not build"
+  run sh "$GUARD" "$WORK/sel_ok"
+  [ "$status" -eq 0 ]
+}
+
+@test "MAVERICKS_ALLOW_SELECTORS allowlists a respondsToSelector-guarded selector" {
+  [ -f "$WORK/sel_bad" ] || skip "sel_bad fixture did not build"
+  run env MAVERICKS_ALLOW_SELECTORS=labelColor sh "$GUARD" "$WORK/sel_bad"
+  [ "$status" -eq 0 ]
 }

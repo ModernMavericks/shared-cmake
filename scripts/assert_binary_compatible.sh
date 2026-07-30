@@ -1,7 +1,7 @@
 #!/bin/sh
 # 10.9 userland compat guard for one or more shipped Mach-O binaries.
-# Per binary: (1) no post-10.9 UNDEFINED import, (2) arch exactly x86_64,
-# (3) LC_VERSION_MIN_MACOSX == 10.9. Fail-closed if nothing measured.
+# Per binary: (1) no post-10.9 UNDEFINED import, (2) no post-10.9 ObjC selector sent,
+# (3) arch exactly x86_64, (4) LC_VERSION_MIN_MACOSX == 10.9. Fail-closed if nothing measured.
 #
 # This is what makes a newer-SDK cross-build trustworthy: the newer SDK will
 # happily let you link post-10.9 symbols that simply are not present on a real
@@ -10,6 +10,8 @@
 # Knobs:
 #   MAVERICKS_POST_10_9_SYMBOLS    extra post-10.9 symbols (grep -E alternation) that must
 #                                  not appear as undefined imports.
+#   MAVERICKS_POST_10_9_SELECTORS  extra post-10.9 ObjC selectors (grep -E alternation) to deny.
+#   MAVERICKS_ALLOW_SELECTORS      post-10.9 selectors the code guards with -respondsToSelector:.
 #   MAVERICKS_REQUIRE_DEFINED_SYMBOLS  symbols that MUST be DEFINED (a project's 10.9 shims).
 #   MAVERICKS_ALLOW_GUARDED_WEAK   grep -E alternation of post-10.9 symbols permitted ONLY when
 #                                  imported *weak*. For runtimes (e.g. mavericks-swift) that
@@ -34,6 +36,17 @@ fi
 
 REQUIRE_DEFINED="${MAVERICKS_REQUIRE_DEFINED_SYMBOLS:-}"
 ALLOW_WEAK="${MAVERICKS_ALLOW_GUARDED_WEAK:-}"
+
+# Post-10.9 Objective-C SELECTORS. These dispatch through objc_msgSend, so they are NOT undefined
+# symbols -- the import check above (nm) cannot see them. A 10.9 binary that SENDS one (e.g.
+# -[NSColor labelColor], 10.10+) links clean but no-ops/misbehaves on 10.9 (grey buttons, wrong
+# colors). The selector name is a C string in __TEXT,__objc_methname; match it whole-line via
+# `strings -a`. This is the exact gap that let an SDK-12 Sparkle (grey "Install" button) pass.
+#   MAVERICKS_POST_10_9_SELECTORS  extra post-10.9 selectors (grep -E alternation) to deny.
+#   MAVERICKS_ALLOW_SELECTORS      selectors the code guards with -respondsToSelector: (allowlist).
+POST_10_9_SEL='labelColor|secondaryLabelColor|tertiaryLabelColor|quaternaryLabelColor|controlAccentColor'
+[ -n "${MAVERICKS_POST_10_9_SELECTORS:-}" ] && POST_10_9_SEL="$POST_10_9_SEL|$MAVERICKS_POST_10_9_SELECTORS"
+ALLOW_SEL="${MAVERICKS_ALLOW_SELECTORS:-}"
 
 # Undefined imports of a Mach-O as "W <name>" (weak) / "H <name>" (hard), one per line.
 # nm -m lines look like: "<addr|spaces> (undefined) [weak] external _sym (from libX)".
@@ -61,6 +74,14 @@ for b in "$@"; do
   fi
   leak=$(printf '%s\n%s\n' "$hard_leak" "$weak_leak" | grep -v '^$' || true)
   [ -z "$leak" ] || { echo "compat guard: post-10.9 undefined import(s) in $b:" >&2; printf '%s\n' "$leak" | sed 's/^/  /' >&2; fail=1; }
+
+  # Post-10.9 ObjC selectors sent (invisible to nm; live in __objc_methname). See POST_10_9_SEL.
+  sel_leak=$(strings -a "$b" 2>/dev/null | grep -xE "($POST_10_9_SEL)" | sort -u || true)
+  if [ -n "$ALLOW_SEL" ]; then
+    sel_leak=$(printf '%s\n' "$sel_leak" | grep -vxE "($ALLOW_SEL)" || true)
+  fi
+  sel_leak=$(printf '%s\n' "$sel_leak" | grep -v '^$' || true)
+  [ -z "$sel_leak" ] || { echo "compat guard: post-10.9 ObjC selector(s) sent in $b:" >&2; printf '%s\n' "$sel_leak" | sed 's/^/  /' >&2; fail=1; }
 
   if [ -n "$REQUIRE_DEFINED" ]; then
     # Defined symbols = nm entries whose line is NOT an undefined ('U'/'u') entry.
