@@ -92,6 +92,12 @@ fi
 [ $# -eq 6 ] || { echo "usage: gen_appcast.sh <channel-title> <version> <pkg-url> <min-os> <notes-file> <enclosure-attrs>" >&2; exit 2; }
 CHANNEL_TITLE="$1"; VER="$2"; URL="$3"; MINOS="$4"; NOTES_FILE="$5"; ENCLOSURE_ATTRS="$6"
 
+# Sparkle's SUStandardVersionComparator can't order the "-mavericks.N" suffix (it reads 1.2.3-mavericks.3
+# and .4 as EQUAL), so <sparkle:version> -- the value it COMPARES against the app's CFBundleVersion -- must
+# be numeric-only. Turn "-mavericks." into ".", e.g. 1.102.0-mavericks.4 -> 1.102.0.4. The human string
+# stays in <sparkle:shortVersionString>. Must match MavericksSparkle.cmake's CFBundleVersion derivation.
+BUILD_VER=$(printf '%s' "$VER" | sed 's/-mavericks\./\./')
+
 [ -f "$NOTES_FILE" ] || { echo "release notes not found: $NOTES_FILE" >&2; exit 1; }
 [ -s "$NOTES_FILE" ] || { echo "release notes empty: $NOTES_FILE" >&2; exit 1; }
 
@@ -106,7 +112,7 @@ cat <<XML
     <item>
       <title>Version $VER</title>
       <pubDate>$PUBDATE</pubDate>
-      <sparkle:version>$VER</sparkle:version>
+      <sparkle:version>$BUILD_VER</sparkle:version>
       <sparkle:shortVersionString>$VER</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>$MINOS</sparkle:minimumSystemVersion>
       <description><![CDATA[

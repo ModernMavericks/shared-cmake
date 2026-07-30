@@ -101,7 +101,16 @@ function(mavericks_add_updater_app)
   set(MAVERICKS_BUNDLE_ID       "${A_BUNDLE_ID}")
   set(MAVERICKS_FEED_URL        "${A_FEED_URL}")
   set(MAVERICKS_ED_PUBKEY       "${A_ED_PUBKEY}")
-  set(MAVERICKS_VERSION         "${A_VERSION}")
+  set(MAVERICKS_VERSION         "${A_VERSION}")                   # display (CFBundleShortVersionString)
+  # Sparkle compares CFBundleVersion (and the appcast's <sparkle:version>) with SUStandardVersionComparator,
+  # which CANNOT order the "-mavericks.N" suffix: it reads 1.2.3-mavericks.3 and 1.2.3-mavericks.4 as EQUAL,
+  # so a same-upstream repackage (every -mavericks.(N+1) ingredient/patch bump) is invisible to auto-update.
+  # Give the comparator a numeric-only build version by turning "-mavericks." into ".", e.g.
+  # 1.102.0-mavericks.4 -> 1.102.0.4. That orders correctly on BOTH axes (upstream and N), and an already
+  # installed "-mavericks.N" host still sees a numeric appcast as newer (Sparkle ranks a number above the
+  # "-mavericks" string), so existing installs self-migrate. Must match scripts/gen_appcast.sh.
+  # Assumes the upstream version is dotted-numeric (the family strips any leading "v").
+  string(REPLACE "-mavericks." "." MAVERICKS_BUILD_VERSION "${A_VERSION}")  # comparison (CFBundleVersion)
   set(MAVERICKS_AUTO_CHECK      "${A_AUTO_CHECK}")                 # plist: true|false
   set(MAVERICKS_LOG_PREFIX      "${A_LOG_PREFIX}")
   set(MAVERICKS_CONFIRM_TITLE   "${A_CONFIRM_TITLE}")
