@@ -52,6 +52,27 @@ updaters, signing, or compat checks:**
 | `sign_and_appcast.sh` · `gen_appcast.sh` | EdDSA-signs + renders the appcast (fetches `ed25519-sign` via `gh`) | rolling your own signing |
 | `mavericks_fetch` · `mavericks_locate` | fetch / locate helpers | ad-hoc `curl` / paths |
 
+## The build must also run natively ON 10.9
+
+CI and day-to-day development happen on modern macOS, but a ModernMavericks product's build must
+generally still work **natively on a real Mavericks box**, with occasional deliberate exceptions. That
+is not sentiment: a native build is the check that the cross-build's inputs and assumptions are honest,
+and it is how the family avoids depending on a runner it can never reproduce.
+
+Practically, for anything a **native 10.9 build executes** — `versions.sh`, `version.sh`, the
+`build/*.sh` chain, packaging:
+
+- **POSIX `/bin/sh` only.** No bashisms; 10.9's `/bin/sh` is old.
+- **Assume 10.9-vintage tools.** `patch` is Apple's 2.0 (it has `-F` fuzz, it does **not** have
+  `--merge`). Do not assume GNU behaviour from coreutils flags — `sort -V` in particular is not
+  something to rely on there.
+- **No `python3`.** 10.9 ships Python 2 only.
+- Prefer git plumbing and plain shell over anything that arrived with Homebrew.
+
+Scripts that only ever run **in CI** (the conventions gate, release-notes generation, the publish path)
+may use `python3`, `sort -V`, and modern tools freely — but say so, so the next person knows which side
+of the line a script is on. When a script must work in both places, the 10.9 constraint wins.
+
 ## Build equivalence: native-10.9 ≡ modern-cross (core invariant)
 
 The product must run on **10.9**, but **there is no 10.9 build runner in CI** — every project cross-builds
