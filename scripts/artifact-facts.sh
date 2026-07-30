@@ -32,7 +32,7 @@ for f in "$dist"/*; do
     *.pkg)
       # pkgutil is the only way to read what the .pkg actually declares; a filename is a claim, not a
       # fact, and the whole point here is to compare claims against what shipped.
-      x="$(mktemp -d)"
+      x="$(mktemp -d "${TMPDIR:-/tmp}/artifact-facts.XXXXXX")"   # template: 10.9 BSD mktemp requires one
       if pkgutil --expand "$f" "$x/x" >/dev/null 2>&1; then
         if [ -f "$x/x/Distribution" ]; then
           # A product archive: version, floor and identity all live in Distribution.
@@ -67,9 +67,12 @@ for f in "$dist"/*; do
       rm -rf "$x"
       ;;
     *appcast*.xml)
-      # sparkle:version and the minimum system version are ELEMENTS, not attributes -- the enclosure's
-      # attributes carry only the URL, length and signature.
-      ver="$(sed -n 's|.*<sparkle:version>\([^<]*\)<.*|\1|p' "$f" | head -1)"
+      # The version that IDENTIFIES the release (and must match the .pkg, tag and floor) is the human
+      # shortVersionString. <sparkle:version> is a separate NUMERIC comparison key (X.Y.Z.N) that Sparkle
+      # can actually order -- deliberately NOT equal to the "-mavericks.N" release version (see
+      # MavericksSparkle.cmake / gen_appcast.sh), so conformance reads shortVersionString here.
+      # These, and the minimum system version, are ELEMENTS; the enclosure attributes carry only URL/length/sig.
+      ver="$(sed -n 's|.*<sparkle:shortVersionString>\([^<]*\)<.*|\1|p' "$f" | head -1)"
       minos="$(sed -n 's|.*<sparkle:minimumSystemVersion>\([^<]*\)<.*|\1|p' "$f" | head -1)"
       url="$(sed -n 's/.*<enclosure[^>]*url="\([^"]*\)".*/\1/p' "$f" | head -1)"
       len="$(sed -n 's/.*<enclosure[^>]*length="\([^"]*\)".*/\1/p' "$f" | head -1)"

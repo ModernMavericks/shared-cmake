@@ -22,7 +22,7 @@
 #   usage: artifact-facts.sh dist "$VER" | check-artifact-conformance.sh
 set -eu
 
-tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/conformance.XXXXXX")"; trap 'rm -rf "$tmp"' EXIT  # template: 10.9 BSD mktemp requires one
 facts="$tmp/facts"; cat > "$facts"
 
 status=0
