@@ -180,6 +180,22 @@ Two release models — **pick by how you publish**:
   `SPARKLE_PRIVATE_KEY` (they resolve `release=no`).
 - Runner `macos-26` (fallback `macos-15`); `actions/*@v7` on new repos.
 
+## Version scaffolding (shared, wrapped)
+
+- **`version.sh`, `lib.sh`, and `release-notes-file.sh` live in shared-cmake.** A repo carries only
+  thin wrappers: `build/msc.sh` locates the installed scripts (`$MSC_SCRIPTS` → CMake user package
+  registry → sibling checkout), and `build/version.sh` / `build/release-notes-file.sh` exec the shared
+  implementation. Only the product name passed to the notes builder is genuinely per-repo.
+- Wrapping rather than deleting keeps every call site working: `sh build/version.sh auto` on a dev
+  box, the repo's own tests, `versions.sh`, and the release workflow.
+- **`$MAVERICKS_ROOT` is the family-wide root variable** the shared logic reads. The wrapper sets it
+  from its own location (a wrapper knows its repo definitively); `lib.sh` only defaults it, since it
+  may be sourced where the root is already established. Repo-specific helpers go in the repo's
+  `lib.sh` *after* sourcing the shared one — never as a copy of a shared function.
+- **Install shared-cmake before computing the version** in CI: the wrapper needs `$MSC_SCRIPTS`.
+- If a repo's test copies `build/` into a temp dir, copy **all** of `build/*.sh`. Cherry-picking a
+  named subset silently breaks a wrapper that sources `msc.sh` — it caught two repos.
+
 ## Publishing a release
 
 - **Publish with the shared workflow, never by hand.** A publish job is:
@@ -372,7 +388,7 @@ it here.** A silently dropped increment is how the family drifted in the first p
 
 - [x] Shared scripts dir (`$MSC_SCRIPTS`), shared test runner, conventions gate — done 2026-07-30
 - [x] Reusable `publish-release.yml` — done 2026-07-30; all seven repos publish through it
-- [ ] Promote `version.sh` / `lib.sh` / `release-notes-file.sh` into shared-cmake
+- [x] Promote `version.sh` / `lib.sh` / `release-notes-file.sh` into shared-cmake — done 2026-07-30
 - [x] One publisher — done 2026-07-30 with increment 2. The two version *models*
       (derive-from-tags vs committed `VERSION`) remain, and are a real design question, not drift
 - [ ] Encode the patch-only automerge policy in the preset; delete the local overrides (five repos
