@@ -340,6 +340,22 @@ in the same commit.
     "enabledPlugins": {"modernmavericks@modernmavericks": true}}
    ```
 
+## Consolidation backlog
+
+The family is mid-consolidation: each item below replaces per-repo machinery with one shared
+implementation. Detail lives in `docs/superpowers/specs/2026-07-30-family-consolidation-umbrella.md`
+in shared-cmake (that dir is gitignored, so this list is the durable half). **When you land one, strike
+it here.** A silently dropped increment is how the family drifted in the first place.
+
+- [x] Shared scripts dir (`$MSC_SCRIPTS`), shared test runner, conventions gate — done 2026-07-30
+- [ ] Reusable `publish-release.yml` — four bespoke publish jobs become ~6-line callers, and "notes
+      reach the Release body" stops being per-repo wiring that can silently be omitted
+- [ ] Promote `version.sh` / `lib.sh` / `release-notes-file.sh` into shared-cmake
+- [ ] One publisher, one version model (`gh release create` vs `action-gh-release`) — or write down why
+      two is right, given that only committed-`VERSION` repos need inline tag minting
+- [ ] Encode the patch-only automerge policy in the preset; delete the local overrides (five repos
+      currently inherit bare `automerge: true` and will auto-merge **major** bumps)
+
 ## Common mistakes
 
 - Hardcoding the upstream version in a test → self-blocks the next Renovate automerge.
