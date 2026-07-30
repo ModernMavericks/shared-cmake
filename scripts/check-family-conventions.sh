@@ -53,9 +53,14 @@ fi
 
 # 5. Notes must reach readers. An empty Release body ships without anyone noticing (tailscale did,
 #    for every release, including hand-tagged ones that had a committed notes file).
-ci_mentions '--notes-file' || ci_mentions 'body_path' || ci_mentions '--generate-notes' \
+# publish-release.yml is the strongest evidence: it OWNS the body and fails on an empty one. The other
+# three only show that some step was handed notes -- note that --notes-file also matches a Sparkle
+# appcast call, which is not the Release body, so this check is weaker than it reads for repos that
+# have not adopted the shared publisher yet.
+ci_mentions 'publish-release.yml' || ci_mentions '--notes-file' || ci_mentions 'body_path' \
+  || ci_mentions '--generate-notes' \
   || fail "the release publishes no notes body" \
-          "pass --notes-file / body_path (or --generate-notes) when creating the release"
+          "publish via publish-release.yml@v1, or pass --notes-file / body_path when creating the release"
 
 [ "$status" -eq 0 ] && echo "check-family-conventions: ok"
 exit "$status"

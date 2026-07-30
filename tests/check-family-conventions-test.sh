@@ -67,6 +67,21 @@ printf '{"extends":["github>ModernMavericks/shared-cmake"],"ignoreTests":true}\n
 mkrepo "$work/n"; grep -v 'notes-file' "$work/ok/.github/workflows/release.yml" > "$work/n/.github/workflows/release.yml"
 if (cd "$work/n" && sh "$S" >/dev/null 2>&1); then echo "FAIL no notes should fail"; exit 1; fi
 
+# a repo that publishes via the shared workflow satisfies the notes check: the caller has no
+# --notes-file or body_path of its own, because publish-release.yml owns the body (and fails on an
+# empty one, which is stronger than what this check can see).
+mkrepo "$work/p"
+python3 - "$work/p/.github/workflows/release.yml" <<'PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+s=s.replace('      - run: gh release create "$TAG" dist/* --notes-file "$NOTES"\n',
+            '  publish:\n'
+            '    uses: ModernMavericks/shared-cmake/.github/workflows/publish-release.yml@v1\n'
+            '    with: { version: "1.0.0", artifact: pkg }\n')
+open(p,'w').write(s)
+PY
+(cd "$work/p" && sh "$S" >/dev/null) || { echo "FAIL publish-release caller should satisfy the notes check"; exit 1; }
+
 # tests may be run from a DIFFERENT workflow (tailscale runs ctest from ci.yml, not release.yml)
 mkrepo "$work/x"; grep -v 'run-repo-tests' "$work/ok/.github/workflows/release.yml" > "$work/x/.github/workflows/release.yml"
 printf 'name: CI\njobs:\n  build:\n    steps:\n      - run: ctest --preset cross\n' > "$work/x/.github/workflows/ci.yml"
