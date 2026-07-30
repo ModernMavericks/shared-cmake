@@ -385,6 +385,14 @@ invent a hand-maintained pinned hash when upstream already publishes one** — t
   circularity — assert with `otool -L`). EdDSA-signed; private key is the `SPARKLE_PRIVATE_KEY` secret.
 - `mavericks_add_updater_app()` self-fetches the Sparkle framework at configure time; signing/appcast use
   the shared `sign_and_appcast.sh` (fetches `ed25519-sign` via `gh` → needs `GH_TOKEN`).
+- **A menu/systray "Check for Updates" MUST launch the updater via LaunchServices, not fork+exec.** Run
+  `/usr/bin/open "<…>/ProductUpdater.app" --args --user`, NOT `NSTask`/`exec.Command` on the executable
+  inside `Contents/MacOS`. Sparkle's package install runs its privileged helper via
+  `AuthorizationExecuteWithPrivileges`, which needs a LaunchServices session; a fork+exec'd host has none,
+  so the install dies with `SUSparkleErrorDomain 4005` / `errAuthorizationInternal (-60008)` (or hangs).
+  The updater's `Info.plist` (a normal app, not `LSUIElement`) exists to satisfy this — the caller must too.
+  `--user` = interactive check; the daily LaunchAgent uses `--background` and is unaffected (it never
+  runs a privileged install).
 
 ## Family conventions (checked, not just written down)
 
