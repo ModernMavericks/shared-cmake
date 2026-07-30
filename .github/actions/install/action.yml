@@ -24,3 +24,13 @@ runs:
         cmake -S "$root" -B "$RUNNER_TEMP/msc-build"
         cmake --install "$RUNNER_TEMP/msc-build" --prefix "$prefix"
         echo "installed mavericks-shared-cmake -> $prefix (registered in the CMake user package registry)"
+
+        # Export the scripts dir so consumers stop re-deriving it. Every consumer previously repeated
+        # SCR="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts" -- 11 copies
+        # across the family. The action already knows where it installed, so it can just say so.
+        # The registry lookup stays valid (it is what this reads), so adoption is per-repo, no flag day.
+        scripts="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* 2>/dev/null | head -1)/scripts"
+        [ -d "$scripts" ] || scripts="$prefix/share/cmake/MavericksSharedCMake/scripts"
+        [ -d "$scripts" ] || { echo "::error::cannot locate installed shared-cmake scripts dir"; exit 1; }
+        echo "MSC_SCRIPTS=$scripts" >> "$GITHUB_ENV"
+        echo "MSC_SCRIPTS=$scripts"

@@ -32,8 +32,10 @@ The family has an older/simpler variant and a current/mature variant. **Start fr
   `CMAKE_PREFIX_PATH`, no vendored copy, no hand-run `cmake --install`.**
 - `@v1` is the **moving major tag**; Renovate's native github-actions manager tracks it — **no custom
   manager, no SHA pin, no marker comment** for it.
-- Resolve its scripts dir at runtime from the registry:
-  `SH="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"`.
+- **After `install@v1`, use `$MSC_SCRIPTS`** — the action exports the installed scripts dir. Do NOT
+  re-derive it with `SH="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"`;
+  that incantation appeared 11 times across the family before it was exported once. (It remains valid
+  — it is what the action itself reads — so adopting `$MSC_SCRIPTS` is per-repo, never a flag day.)
 - Reuse a sibling checkout of shared-cmake locally; don't duplicate its logic.
 
 **Use its facilities for 10.9-correctness — do NOT reinvent SDK fetching, floors, build-mode handling,
