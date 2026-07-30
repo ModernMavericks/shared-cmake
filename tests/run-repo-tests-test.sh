@@ -28,4 +28,14 @@ mkdir -p tests/fixtures
 printf '#!/bin/sh\nexit 1\n' > tests/fixtures/nested.sh
 sh "$S" >/dev/null || { echo "FAIL nested script must not be run"; exit 1; }
 
+# A .bats file with no bats is a FAILURE, not a skip: install@v1 provides bats on every runner, so its
+# absence means the environment is broken -- and a skipped assertion is one nobody is checking, which
+# is the whole hole this runner exists to close.
+printf '#!/usr/bin/env bats\n@test "trivial" { true; }\n' > tests/d.bats
+if out="$(PATH=/usr/bin:/bin sh "$S" 2>&1)"; then echo "FAIL missing bats should fail the runner: $out"; exit 1; fi
+printf '%s\n' "$out" | grep -q 'FAIL tests/d.bats' || { echo "FAIL should report the bats file as FAIL: $out"; exit 1; }
+printf '%s\n' "$out" | grep -qi 'bats' || { echo "FAIL should say bats is missing: $out"; exit 1; }
+# with bats present it runs normally
+sh "$S" >/dev/null || { echo "FAIL bats file should pass when bats is installed"; exit 1; }
+
 echo "PASS: run-repo-tests"

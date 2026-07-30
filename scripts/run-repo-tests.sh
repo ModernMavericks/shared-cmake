@@ -31,11 +31,14 @@ for t in tests/*.sh tests/*.bats; do
   rc=0
   case "$t" in
     *.bats)
-      if command -v bats >/dev/null 2>&1; then
-        bats "$t" >/dev/null 2>&1 || rc=$?
-      else
-        echo "SKIP $t (bats not installed)"; continue
-      fi ;;
+      # Missing bats is a FAILURE, not a skip: install@v1 puts it on every runner, so its absence
+      # means the environment is broken. Skipping would leave these assertions running nowhere --
+      # the exact hole this runner exists to close.
+      command -v bats >/dev/null 2>&1 || {
+        echo "FAIL $t (bats not installed -- install@v1 provides it in CI; 'brew install bats-core' locally)"
+        status=1; continue
+      }
+      bats "$t" >/dev/null 2>&1 || rc=$? ;;
     *) sh "$t" >/dev/null 2>&1 || rc=$? ;;
   esac
   case "$rc" in
