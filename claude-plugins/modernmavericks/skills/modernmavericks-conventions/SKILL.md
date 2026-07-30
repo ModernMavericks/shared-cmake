@@ -180,6 +180,25 @@ Two release models — **pick by how you publish**:
   `SPARKLE_PRIVATE_KEY` (they resolve `release=no`).
 - Runner `macos-26` (fallback `macos-15`); `actions/*@v7` on new repos.
 
+## Publishing a release
+
+- **Publish with the shared workflow, never by hand.** A publish job is:
+  ```yaml
+  publish:
+    needs: [build]
+    if: needs.build.outputs.publish == 'true'
+    permissions: { contents: write }
+    uses: ModernMavericks/shared-cmake/.github/workflows/publish-release.yml@v1
+    with: { version: "${{ needs.build.outputs.version }}", artifact: <artifact name> }
+  ```
+- Put the assets **and** `RELEASE_NOTES.md` in that artifact. The workflow regenerates `SHA256SUMS`
+  (so drop any local `shasum` step), uses the notes as the Release body, and **fails if the notes are
+  missing or empty**. An empty body is not a degraded release, it is the defect this removes: tailscale
+  shipped one on every release — including hand-tagged ones that had a committed notes file — and
+  swift-runtime set no body at all, because that wiring was per-repo.
+- It publishes with `action-gh-release` (`tag_name` + `target_commitish`), which mints the tag inline.
+  The dispatch-cut repos need that: a `GITHUB_TOKEN`-pushed tag triggers nothing.
+
 ## Release notes
 
 - One committed file per release: `release-notes/<full-version>.md` (becomes the Sparkle appcast

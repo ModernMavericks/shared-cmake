@@ -1,0 +1,89 @@
+name: publish-release
+
+# Reusable: the one way the family publishes. The caller hands over a version and the artifact holding
+# its assets plus RELEASE_NOTES.md; this downloads them, regenerates SHA256SUMS, and creates or updates
+# the release with those notes as its body.
+#
+# It owns checksums and the body on purpose. Both were per-repo before, and both were silently omitted:
+# tailscale published an empty Release body on EVERY release (including hand-tagged ones that had a
+# committed notes file), and swift-runtime set no body at all.
+#
+# action-gh-release, not `gh release create`: tag_name + target_commitish mint the tag inline, which
+# the dispatch-cut repos require -- a GITHUB_TOKEN-pushed tag triggers nothing.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Release version; also the tag name."
+        type: string
+        required: true
+      artifact:
+        description: "Artifact holding the assets and the notes file."
+        type: string
+        required: true
+      notes-file:
+        description: "Notes file within the artifact; becomes the Release body."
+        type: string
+        required: false
+        default: RELEASE_NOTES.md
+      target-commitish:
+        description: "Commit the tag is minted at. Defaults to the caller's SHA."
+        type: string
+        required: false
+        default: ""
+      checksums:
+        description: "Generate SHA256SUMS over the assets."
+        type: boolean
+        required: false
+        default: true
+      shared-cmake-ref:
+        description: "shared-cmake ref to take release-assets.sh from."
+        type: string
+        required: false
+        default: v1
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out shared-cmake (for release-assets.sh)
+        uses: actions/checkout@v7
+        with:
+          repository: ModernMavericks/shared-cmake
+          ref: ${{ inputs.shared-cmake-ref }}
+          path: .shared-cmake
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifact }}
+          path: dist
+
+      - name: Select assets, verify the notes, checksum
+        id: assets
+        env:
+          NOTES: ${{ inputs.notes-file }}
+          CHECKSUMS: ${{ inputs.checksums }}
+        run: |
+          set -eu
+          # Fails loudly when the notes are missing or empty -- publishing is where the notes promise
+          # is kept, so an empty body stops the release rather than shipping quietly.
+          files="$(sh .shared-cmake/scripts/release-assets.sh dist "$NOTES")"
+          if [ "$CHECKSUMS" = true ]; then
+            ( cd dist && printf '%s\n' "$files" | sed 's|^dist/||' | xargs shasum -a 256 > SHA256SUMS )
+            files="$files
+          dist/SHA256SUMS"
+          fi
+          echo "=== assets ==="; printf '%s\n' "$files"
+          echo "=== body ==="; cat "dist/$NOTES"
+          { echo 'files<<EOF'; printf '%s\n' "$files"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version }}
+          target_commitish: ${{ inputs.target-commitish || github.sha }}
+          body_path: dist/${{ inputs.notes-file }}
+          files: ${{ steps.assets.outputs.files }}
