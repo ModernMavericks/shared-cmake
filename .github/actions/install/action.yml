@@ -21,6 +21,23 @@ runs:
         # the repo root (with CMakeLists.txt) is three levels up.
         root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)"
         prefix="${{ inputs.prefix }}"; [ -n "$prefix" ] || prefix="$HOME/.local"
+
+        # Ensure bats BEFORE configuring: shared-cmake's CMakeLists registers its shell-helper tests
+        # only when bats is present ("bats not found -- shell helper tests won't run via ctest"), so
+        # installing it afterwards would leave that first configure short of tests.
+        # run-repo-tests.sh likewise reports SKIP for *.bats without it, which is honest but useless:
+        # those assertions then run nowhere, the same hole that let two tests rot unnoticed.
+        # Installed from the platform package manager (checksummed bottle/package), not a curl|sh.
+        if command -v bats >/dev/null 2>&1; then
+          echo "bats: $(command -v bats)"
+        elif command -v brew >/dev/null 2>&1; then
+          brew install bats-core && echo "bats: installed via brew"
+        elif command -v apt-get >/dev/null 2>&1; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq bats && echo "bats: installed via apt"
+        else
+          echo "::warning::no bats and no package manager to install it; *.bats tests will be skipped"
+        fi
+
         cmake -S "$root" -B "$RUNNER_TEMP/msc-build"
         cmake --install "$RUNNER_TEMP/msc-build" --prefix "$prefix"
         echo "installed mavericks-shared-cmake -> $prefix (registered in the CMake user package registry)"
@@ -35,17 +52,3 @@ runs:
         echo "MSC_SCRIPTS=$scripts" >> "$GITHUB_ENV"
         echo "MSC_SCRIPTS=$scripts"
 
-        # Ensure bats. run-repo-tests.sh reports SKIP for *.bats when bats is absent, which is honest
-        # but useless: those assertions then never run anywhere, which is the same hole that let two of
-        # macports-legacy-support's tests rot. Every runner installing shared-cmake gets bats, so a
-        # .bats file is executed rather than politely skipped. Installed from the platform package
-        # manager (checksummed formula/package), not a curl|sh of someone's install script.
-        if command -v bats >/dev/null 2>&1; then
-          echo "bats: $(command -v bats)"
-        elif command -v brew >/dev/null 2>&1; then
-          brew install bats-core && echo "bats: installed via brew"
-        elif command -v apt-get >/dev/null 2>&1; then
-          sudo apt-get update -qq && sudo apt-get install -y -qq bats && echo "bats: installed via apt"
-        else
-          echo "::warning::no bats and no package manager to install it; *.bats tests will be skipped"
-        fi
