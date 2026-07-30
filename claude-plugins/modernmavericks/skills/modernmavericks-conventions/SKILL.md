@@ -266,6 +266,20 @@ invent a hand-maintained pinned hash when upstream already publishes one** — t
 - `mavericks_add_updater_app()` self-fetches the Sparkle framework at configure time; signing/appcast use
   the shared `sign_and_appcast.sh` (fetches `ed25519-sign` via `gh` → needs `GH_TOKEN`).
 
+## Running a repo's tests
+
+- **Use the shared runner: `sh "$MSC_SCRIPTS/run-repo-tests.sh" [ctest-preset]`.** It runs every
+  top-level `tests/*.sh` and `tests/*.bats` — or `ctest` where that is the driver — so a newly added
+  test file runs the day it lands. Subdirectories are fixtures and sub-suites with their own entry
+  points, not tests to run.
+- **A test that cannot run yet exits 77 to SKIP**, the same idiom as ctest's `SKIP_RETURN_CODE 77`.
+  Guard on the artifact you need (`[ -d "$OUT" ] || { echo "not built — skipping"; exit 77; }`) rather
+  than failing a CI run that was never going to have it.
+- **Never hand-enumerate test files in CI.** That is how `macports-legacy-support` ended up with nine
+  test files it had not run since each was written — two of which had rotted: one asserting Renovate's
+  pre-migration `fileMatch` key, one checking an `.icns` filename that changed when the repo was
+  renamed. Neither was a product bug; both were invisible because nothing ran them.
+
 ## New-project checklist
 
 1. `renovate.json`: extend shared-cmake; add the upstream `customManager` + patch/minor rules; ensure a
