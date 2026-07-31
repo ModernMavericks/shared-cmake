@@ -73,6 +73,17 @@ jobs:
           files="$(sh .shared-cmake/scripts/release-assets.sh dist "$NOTES")"
           if [ "$CHECKSUMS" = true ]; then
             ( cd dist && printf '%s\n' "$files" | sed 's|^dist/||' | xargs shasum -a 256 > SHA256SUMS )
+            # Verify what we just wrote. Generating a checksum file and publishing it unread means the
+            # one artifact nobody can check by eye is the one nobody checked at all -- and a truncated
+            # or partial write looks exactly like a valid file until someone downloads it.
+            ( cd dist && shasum -a 256 -c SHA256SUMS ) \
+              || { echo "::error::SHA256SUMS does not verify against the files it names"; exit 1; }
+            # ...and it must cover exactly the assets being attached: an entry for a file we are not
+            # publishing, or an asset with no entry, is a checksum file that lies by omission.
+            want="$(printf '%s\n' "$files" | sed 's|^dist/||' | sort)"
+            got="$(sed 's/^[0-9a-f]*  //' dist/SHA256SUMS | sort)"
+            [ "$want" = "$got" ] \
+              || { echo "::error::SHA256SUMS covers $got; the assets are $want"; exit 1; }
             files="$files
           dist/SHA256SUMS"
           fi

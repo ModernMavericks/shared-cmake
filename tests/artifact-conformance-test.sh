@@ -127,4 +127,44 @@ deviation version:upstream-swift-*.pkg mirrored verbatim from swift.org
 pkg ours.pkg 6.3.3-mavericks.1 10.9.5 dev.modernmavericks.swift
 asset ours.pkg 10'
 
+# --- the appcast must point INTO THIS RELEASE ------------------------------------------------------
+# An enclosure URL carries the release tag. If it names another release, Sparkle serves users a
+# different build than the one just published -- the feed and the release silently disagree, and every
+# other check still passes because both artifacts are individually fine.
+ok "an enclosure pointing at this release" 'expected 1.26.5-mavericks.5
+pkg p.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
+appcast appcast.xml 1.26.5-mavericks.5 p.pkg 10 10.9.5
+enclosure-url appcast.xml https://github.com/ModernMavericks/golang/releases/download/1.26.5-mavericks.5/p.pkg
+asset p.pkg 10
+asset appcast.xml 700'
+
+no "an enclosure pointing at a DIFFERENT release" "enclosure-url" 'expected 1.26.5-mavericks.5
+pkg p.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
+appcast appcast.xml 1.26.5-mavericks.5 p.pkg 10 10.9.5
+enclosure-url appcast.xml https://github.com/ModernMavericks/golang/releases/download/1.26.5-mavericks.4/p.pkg
+asset p.pkg 10
+asset appcast.xml 700'
+
+# --- line-scoped identity -------------------------------------------------------------------------
+# Where a repo ships parallel upstream lines, the line IS the product: go126 and go127 must not share
+# an identifier, or two products claim one install and the updater cannot tell them apart.
+ok "identifiers carrying their line" 'expected 1.26.5-mavericks.5
+line 126
+pkg native.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
+pkg cross.pkg 1.26.5-mavericks.5 none dev.modernmavericks.golang.go126-cross
+appcast appcast-cross.xml 1.26.5-mavericks.5 cross.pkg 10 11.0
+asset native.pkg 10
+asset cross.pkg 10
+asset appcast-cross.xml 700'
+
+no "an identifier missing its line" "line" 'expected 1.26.5-mavericks.5
+line 126
+pkg native.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang
+asset native.pkg 10'
+
+# a repo with no lines is not asked the question
+ok "a single-line product" 'expected 1.5.2-mavericks.2
+pkg p.pkg 1.5.2-mavericks.2 10.9.5 dev.modernmavericks.legacysupport
+asset p.pkg 10'
+
 echo "PASS: artifact-conformance"

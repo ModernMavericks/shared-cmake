@@ -106,5 +106,31 @@ while read -r kind file ver enclosure length minos; do
   fi
 done < "$facts"
 
+# --- ITSELF: the appcast points INTO this release --------------------------------------------------
+# An enclosure URL carries the release tag. Naming another release makes the feed serve users a build
+# other than the one just published -- and every other check still passes, because both artifacts are
+# individually fine. Only the relationship between them is wrong.
+while read -r kind file url; do
+  [ "$kind" = enclosure-url ] || continue
+  case "$url" in
+    */download/"$expected"/*) : ;;
+    *) fail enclosure-url "$file points outside this release: $url" "$file" ;;
+  esac
+done < "$facts"
+
+# --- SIBLINGS: where a repo ships parallel upstream lines, the line IS the product -----------------
+# go126 and go127 must not share an identifier, or two products claim one install and an updater
+# cannot tell which it is looking at.
+line="$(sed -n 's/^line \(..*\)$/\1/p' "$facts" | head -1)"
+if [ -n "$line" ]; then
+  while read -r kind file ver floor ident; do
+    [ "$kind" = pkg ] || continue
+    case "$ident" in
+      *"$line"*) : ;;
+      *) fail line "$file has identifier '$ident', which does not carry line $line" "$file" ;;
+    esac
+  done < "$facts"
+fi
+
 [ "$status" -eq 0 ] && echo "conformance: ok — $expected"
 exit "$status"

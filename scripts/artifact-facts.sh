@@ -14,6 +14,13 @@ root="${3:-$(pwd)}"
 
 printf 'expected %s\n' "$version"
 
+# A repo shipping parallel upstream lines names the line in every identity. Derive it from the version
+# rather than asking: lines/126 holds 1.26.x by construction, and versions.sh already refuses a line
+# whose upstream disagrees.
+if [ -d "$root/lines" ]; then
+  printf 'line %s\n' "$(printf '%s' "${version%%-mavericks.*}" | cut -d. -f1,2 | tr -d '.')"
+fi
+
 # Declared deviations live in INGREDIENTS.md, under "## Conformance deviations", as
 #   - <check>: <reason>
 # A deviation IS a product fact, which is why it belongs with the other product facts rather than in a
@@ -77,6 +84,9 @@ for f in "$dist"/*; do
       url="$(sed -n 's/.*<enclosure[^>]*url="\([^"]*\)".*/\1/p' "$f" | head -1)"
       len="$(sed -n 's/.*<enclosure[^>]*length="\([^"]*\)".*/\1/p' "$f" | head -1)"
       printf 'appcast %s %s %s %s %s\n' "$b" "${ver:-unknown}" "${url##*/}" "${len:-0}" "${minos:-none}"
+      # The full URL as its own fact: the basename answers "does this asset exist", the URL answers
+      # "does this feed point into THIS release".
+      [ -z "$url" ] || printf 'enclosure-url %s %s\n' "$b" "$url"
       ;;
   esac
 done

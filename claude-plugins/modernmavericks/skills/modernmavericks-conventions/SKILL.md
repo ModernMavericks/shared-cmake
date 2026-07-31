@@ -444,6 +444,44 @@ signal (see the auto-merge intent above — fix runtime regressions in `-maveric
   `--user` = interactive check; the daily LaunchAgent uses `--background` and is unaffected (it never
   runs a privileged install).
 
+## Artifact conformance (checked at package time)
+
+The conventions gate constrains the REPO. `check-artifact-conformance.sh` constrains what comes OUT,
+and runs at package time — before publish, where the artifacts exist and `pkgutil` does.
+
+It exists because every piece was already checked in isolation — the compat guard reads binaries,
+`set_install_floor` stamps a floor, `sign_and_appcast` signs, `publish-release` checksums — and
+**nothing asserted they agree with each other**. A release whose `.pkg`, appcast, checksums and tag
+disagree is incoherent however it was built.
+
+| Axis | Checked |
+|---|---|
+| Itself | `.pkg` / appcast / tag versions match; the enclosure names a published asset at its real length, and points into THIS release |
+| Neighbours | every `.pkg` of one release agrees on the version; where `lines/` exists, each identifier carries its line |
+| Siblings | version scheme `<upstream>-mavericks.N`; identifier `dev.modernmavericks.*`; a product archive declares the 10.9.5 floor |
+
+**This constrains outputs, not methods.** Products here build in genuinely different ways — a Go
+toolchain, a boot2docker iso, libswiftCore, an openssh — and making those look alike would buy
+uniformity by inventing a bespoke "kind" per product. If a check can only pass by changing *how* a
+product is built rather than *what it emits*, it is the wrong check.
+
+**Structure matters more than it looks.** A product archive (`Distribution`) declares an install
+floor; a component package (`PackageInfo`) cannot — floors are a `productbuild` concept — so its
+minimum lives in the appcast instead. golang's cross product is exactly that: it TARGETS 10.9 but RUNS
+on 11.0+, so demanding 10.9.5 of it would be wrong.
+
+**Deviations are declared in `INGREDIENTS.md`, with a reason, scoped to a filename glob:**
+
+```markdown
+## Conformance deviations
+
+- version:upstream-swift-*.pkg: mirrored verbatim from swift.org, so the version is upstream's own
+```
+
+Scoping is the point: swift-toolchain republishing swift.org's `.pkg` must not license the
+build-support tarball it *does* build to drift. An unscoped deviation quietly covers artifacts nobody
+meant to excuse.
+
 ## Family conventions (checked, not just written down)
 
 `sh "$MSC_SCRIPTS/check-family-conventions.sh"` runs in every product repo's CI and **fails the build**
