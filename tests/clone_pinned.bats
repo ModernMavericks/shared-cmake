@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # Tests for scripts/clone_pinned.sh -- the git-source supply-chain boundary. No network: a local
-# fixture repo (tag v1 on commit A, then commit B) stands in for upstream.
+# fixture repo (tag v1 on commit A, then commit B on the default branch) stands in for upstream. The
+# fixture allows fetching a ref-reachable sha (as GitHub does), so the fetch-by-digest path is exercised.
 
 setup() {
   HELPER="$BATS_TEST_DIRNAME/../scripts/clone_pinned.sh"
@@ -8,16 +9,25 @@ setup() {
   UP="$WORK/upstream"; mkdir -p "$UP"
   git -C "$UP" init -q
   git -C "$UP" config user.email t@t; git -C "$UP" config user.name t
+  git -C "$UP" config uploadpack.allowReachableSHA1InWant true
+  git -C "$UP" config uploadpack.allowAnySHA1InWant true
   echo a > "$UP/f"; git -C "$UP" add f; git -C "$UP" commit -qm A
   git -C "$UP" tag v1
   A="$(git -C "$UP" rev-parse HEAD)"
   echo b > "$UP/f"; git -C "$UP" commit -qam B
+  BR="$(git -C "$UP" symbolic-ref --short HEAD)"   # default branch, tip = commit B
   DEST="$WORK/dest"
 }
 teardown() { rm -rf "$WORK"; }
 
 @test "pinned digest == the tag's commit: clones and verifies" {
   run sh "$HELPER" "$UP" v1 "$A" "$DEST"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$DEST" rev-parse HEAD)" = "$A" ]
+}
+
+@test "commit BEHIND the ref tip (branch pin): fetched exactly, not the tip" {
+  run sh "$HELPER" "$UP" "$BR" "$A" "$DEST"   # branch tip is B; we pin A
   [ "$status" -eq 0 ]
   [ "$(git -C "$DEST" rev-parse HEAD)" = "$A" ]
 }
