@@ -203,4 +203,14 @@ printf '# Build ingredients\n\n| I | Pinned in | Renovate | On a bump |\n|---|--
   > "$work/r3/INGREDIENTS.md"
 (cd "$work/r3" && sh "$S" >/dev/null) || { echo "FAIL declared-untrackable should pass"; exit 1; }
 
+# A failing run must NOT also print "ok". The success line used to sit mid-script, so checks appended
+# after it (7, 8, 9) printed "check-family-conventions: ok" and THEN failed -- the exact "output says
+# it passed while it did not" shape these gates exist to prevent.
+mkrepo "$work/ok2"
+printf '# Build ingredients\n\n| I | P | Renovate | On a bump |\n|---|---|---|---|\n| X | `y` | ❌ untracked | manual |\n' \
+  > "$work/ok2/INGREDIENTS.md"
+out="$(cd "$work/ok2" && sh "$S" 2>&1 || true)"
+printf '%s\n' "$out" | grep -q 'check-family-conventions: ok' \
+  && { echo "FAIL a failing run printed ok: $out"; exit 1; }
+
 echo "PASS: check-family-conventions"

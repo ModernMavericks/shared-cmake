@@ -91,7 +91,6 @@ ci_mentions 'publish-release.yml' || ci_mentions '--notes-file' || ci_mentions '
   || fail "the release publishes no notes body" \
           "publish via publish-release.yml@v1, or pass --notes-file / body_path when creating the release"
 
-[ "$status" -eq 0 ] && echo "check-family-conventions: ok"
 # 7. VERSION is DERIVED, not committed. The shipped state lives in tags; a committed VERSION is a
 # second answer to "what version is this?" and it drifts -- container-tools built -mavericks.14 from a
 # committed file that still said .2, which also made its tag path (tag must equal VERSION)
@@ -174,5 +173,9 @@ if [ -f INGREDIENTS.md ]; then
     esac
   done < INGREDIENTS.md
 fi
+
+# LAST, after every check: this line used to sit mid-script, so checks appended below it printed
+# "ok" and then failed in the same run.
+[ "$status" -eq 0 ] && echo "check-family-conventions: ok"
 
 exit "$status"
