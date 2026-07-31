@@ -167,4 +167,52 @@ ok "a single-line product" 'expected 1.5.2-mavericks.2
 pkg p.pkg 1.5.2-mavericks.2 10.9.5 dev.modernmavericks.legacysupport
 asset p.pkg 10'
 
+# --- NEIGHBOURS: variants of one release were built from the same ingredients ----------------------
+# The artifacts cannot answer this: golang's native .pkg carries the CA bundle and the shim, its cross
+# .pkg legitimately does not (cross-built apps look at the native prefix). "Same shim, same CA" is a
+# claim about INPUTS, so each variant records what it used and conformance compares the records.
+ok "variants agreeing on their ingredients" 'expected 1.26.5-mavericks.5
+build-info build-info-native.txt mls_version 1.5.2-mavericks.2
+build-info build-info-native.txt ca_sha256 3ff344e30b9b
+build-info build-info-cross.txt mls_version 1.5.2-mavericks.2
+build-info build-info-cross.txt ca_sha256 3ff344e30b9b
+pkg n.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
+asset n.pkg 10'
+
+no "variants built from DIFFERENT shim pins" "mls_version" 'expected 1.26.5-mavericks.5
+build-info build-info-native.txt mls_version 1.5.2-mavericks.2
+build-info build-info-cross.txt mls_version 1.5.2-mavericks.1
+pkg n.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
+asset n.pkg 10'
+
+no "variants built from different CA bundles" "ca_sha256" 'expected 1.26.5-mavericks.5
+build-info build-info-native.txt ca_sha256 3ff344e30b9b
+build-info build-info-cross.txt ca_sha256 9a1c72b4aa0f
+pkg n.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
+asset n.pkg 10'
+
+# keys that SHOULD differ per variant are not evidence of disagreement
+ok "per-variant keys may differ" 'expected 1.26.5-mavericks.5
+build-info build-info-native.txt variant native
+build-info build-info-native.txt arch x86_64
+build-info build-info-native.txt prefix /usr/local/go126
+build-info build-info-cross.txt variant cross
+build-info build-info-cross.txt arch arm64
+build-info build-info-cross.txt prefix /usr/local/go126-cross
+pkg n.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
+asset n.pkg 10'
+
+# a single-variant product has nothing to compare against
+ok "one variant, nothing to disagree with" 'expected 1.5.2-mavericks.2
+build-info build-info.txt mls_version 1.5.2-mavericks.2
+pkg p.pkg 1.5.2-mavericks.2 10.9.5 dev.modernmavericks.legacysupport
+asset p.pkg 10'
+
+ok "a declared disagreement, with a reason" 'expected 1.26.5-mavericks.5
+deviation ingredients the cross variant is deliberately built against the previous shim this once
+build-info build-info-native.txt mls_version 1.5.2-mavericks.2
+build-info build-info-cross.txt mls_version 1.5.2-mavericks.1
+pkg n.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
+asset n.pkg 10'
+
 echo "PASS: artifact-conformance"

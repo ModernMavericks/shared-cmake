@@ -132,5 +132,20 @@ if [ -n "$line" ]; then
   done < "$facts"
 fi
 
+# --- NEIGHBOURS: variants of one release were built from the same ingredients ----------------------
+# The artifacts cannot answer this. golang's native .pkg carries the CA bundle and the shim; its cross
+# .pkg legitimately does not, because cross-built apps look at the native prefix. "Same shim, same CA"
+# is a claim about INPUTS, which no payload inspection can settle -- so each variant records what it
+# used and this compares the records. Keys that SHOULD differ per variant are named, not guessed:
+# treating every difference as a fault would make the check unusable and then ignored.
+per_variant=" variant arch prefix pkg identifier "
+for key in $(sed -n 's/^build-info [^ ][^ ]* \([^ ][^ ]*\) .*/\1/p' "$facts" | sort -u); do
+  case "$per_variant" in *" $key "*) continue ;; esac
+  vals="$(sed -n "s/^build-info [^ ][^ ]* $key \(..*\)$/\1/p" "$facts" | sort -u)"
+  [ "$(printf '%s\n' "$vals" | wc -l | tr -d ' ')" -le 1 ] && continue
+  files="$(sed -n "s/^build-info \([^ ][^ ]*\) $key .*/\1/p" "$facts" | tr '\n' ' ')"
+  fail ingredients "variants disagree about $key: $(printf '%s' "$vals" | tr '\n' '/') (from $files)"
+done
+
 [ "$status" -eq 0 ] && echo "conformance: ok — $expected"
 exit "$status"

@@ -73,6 +73,12 @@ for f in "$dist"/*; do
       fi
       rm -rf "$x"
       ;;
+    build-info*)
+      # What this variant was built FROM (see build-info.sh). One fact per key so the checker can
+      # compare a single key across variants without parsing files itself.
+      sed -n 's/^\([a-z][a-z0-9_]*\)=\(..*\)$/\1 \2/p' "$f" \
+        | while read -r k v; do printf 'build-info %s %s %s\n' "$b" "$k" "$v"; done
+      ;;
     *appcast*.xml)
       # The version that IDENTIFIES the release (and must match the .pkg, tag and floor) is the human
       # shortVersionString. <sparkle:version> is a separate NUMERIC comparison key (X.Y.Z.N) that Sparkle

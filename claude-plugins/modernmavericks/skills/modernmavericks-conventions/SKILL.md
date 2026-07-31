@@ -457,7 +457,7 @@ disagree is incoherent however it was built.
 | Axis | Checked |
 |---|---|
 | Itself | `.pkg` / appcast / tag versions match; the enclosure names a published asset at its real length, and points into THIS release |
-| Neighbours | every `.pkg` of one release agrees on the version; where `lines/` exists, each identifier carries its line |
+| Neighbours | every `.pkg` of one release agrees on the version; where `lines/` exists, each identifier carries its line; **variants agree about their ingredients** |
 | Siblings | version scheme `<upstream>-mavericks.N`; identifier `dev.modernmavericks.*`; a product archive declares the 10.9.5 floor |
 
 **This constrains outputs, not methods.** Products here build in genuinely different ways — a Go
@@ -469,6 +469,17 @@ product is built rather than *what it emits*, it is the wrong check.
 floor; a component package (`PackageInfo`) cannot — floors are a `productbuild` concept — so its
 minimum lives in the appcast instead. golang's cross product is exactly that: it TARGETS 10.9 but RUNS
 on 11.0+, so demanding 10.9.5 of it would be wrong.
+
+**Record what a variant was built FROM.** `sh "$MSC_SCRIPTS/build-info.sh" dist/build-info-<variant>.txt
+key=value …` at package time, and ship it as a release asset. Conformance compares any key appearing in
+more than one variant, except those that are *supposed* to differ (`variant`, `arch`, `prefix`, `pkg`,
+`identifier`).
+
+This exists because **artifacts cannot answer the question**: golang's native `.pkg` carries the CA
+bundle and the legacy-support shim, its cross `.pkg` legitimately does not (cross-built apps look at
+the native prefix). "Both variants used the same shim" is a claim about *inputs*, which no payload
+inspection can settle — so the build writes it down rather than a checker guessing later. It also means
+a user can read what a release was made from.
 
 **Deviations are declared in `INGREDIENTS.md`, with a reason, scoped to a filename glob:**
 
