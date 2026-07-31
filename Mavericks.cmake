@@ -32,3 +32,4 @@ include(MavericksMode)          # -> MAVERICKS_MODE, guard vs the preset's expec
 include(RequireAppleClang)      # reject gcc / Homebrew / pkgsrc clang
 include(MavericksFetch)         # mavericks_fetch_sdk()
 include(MavericksCompatGuard)   # mavericks_assert_binary_compatible()
+include(MavericksVersion)       # mavericks_resolve_version() -- VERSION is derived, never committed

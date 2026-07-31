@@ -24,6 +24,11 @@ YML
   printf '# Build ingredients\n' > "$1/INGREDIENTS.md"
   printf '{"extends":["github>ModernMavericks/shared-cmake"]}\n' > "$1/.github/renovate.json"
   printf '#!/bin/sh\nexit 0\n' > "$1/tests/a-test.sh"
+  # A compliant repo commits UPSTREAM_VERSION and gitignores VERSION (a build product), and the gate
+  # asks git what is tracked -- so the fixture has to be a real checkout.
+  printf '1.0.0\n' > "$1/UPSTREAM_VERSION"
+  printf '/VERSION\n' > "$1/.gitignore"
+  (cd "$1" && git init -q && git add -A) >/dev/null 2>&1
 }
 
 # compliant repo passes
@@ -120,5 +125,43 @@ PY
 mkrepo "$work/x"; grep -v 'run-repo-tests' "$work/ok/.github/workflows/release.yml" > "$work/x/.github/workflows/release.yml"
 printf 'name: CI\njobs:\n  build:\n    steps:\n      - run: ctest --preset cross\n' > "$work/x/.github/workflows/ci.yml"
 (cd "$work/x" && sh "$S" >/dev/null) || { echo "FAIL tests run from ci.yml should pass"; exit 1; }
+
+# 7. VERSION must not be committed. The shipped state lives in tags; a committed VERSION is a second
+# answer to "what version is this?", and it drifts -- container-tools built -mavericks.14 from a file
+# that still said .2, which also made its tag-triggered publish path (tag must equal VERSION)
+# unsatisfiable. UPSTREAM_VERSION is the committed input; VERSION is derived from it plus the tags.
+mkrepo "$work/v1"
+(cd "$work/v1" && sh "$S" >/dev/null) || { echo "FAIL derived-version repo should pass"; exit 1; }
+
+# a TRACKED VERSION file fails, and the message says which file and what to do
+mkrepo "$work/v2"
+printf '1.0.0-mavericks.3\n' > "$work/v2/VERSION"
+(cd "$work/v2" && git add -f VERSION) >/dev/null 2>&1
+if out="$(cd "$work/v2" && sh "$S" 2>&1)"; then echo "FAIL tracked VERSION should fail"; exit 1; fi
+printf '%s\n' "$out" | grep -q 'VERSION' || { echo "FAIL should name VERSION: $out"; exit 1; }
+
+# an untracked VERSION (a build product sitting in the tree) is FINE -- that is the normal state
+# after any local build, and failing on it would make the gate unrunnable on a developer's machine
+mkrepo "$work/v3"
+printf '1.0.0-mavericks.3\n' > "$work/v3/VERSION"
+(cd "$work/v3" && sh "$S" >/dev/null) || { echo "FAIL untracked VERSION should pass"; exit 1; }
+
+# no upstream input at all: nothing can derive a version, so say so rather than let CI discover it
+mkrepo "$work/v4"; rm "$work/v4/UPSTREAM_VERSION"
+if out="$(cd "$work/v4" && sh "$S" 2>&1)"; then echo "FAIL missing upstream input should fail"; exit 1; fi
+printf '%s\n' "$out" | grep -q 'UPSTREAM_VERSION' || { echo "FAIL should name UPSTREAM_VERSION: $out"; exit 1; }
+
+# a repo whose upstream is DERIVED from its pin (ed25519: the pinned commit's date; tailscale: the
+# upstream's own VERSION.txt) has no committed UPSTREAM_VERSION and must still pass
+mkrepo "$work/v5"; rm "$work/v5/UPSTREAM_VERSION"
+mkdir -p "$work/v5/build"; printf '#!/bin/sh\n: > UPSTREAM_VERSION\n' > "$work/v5/build/derive-upstream-version.sh"
+(cd "$work/v5" && git add -A) >/dev/null 2>&1
+(cd "$work/v5" && sh "$S" >/dev/null) || { echo "FAIL derived upstream should pass"; exit 1; }
+
+# parallel upstream lines (golang) keep one UPSTREAM_VERSION per line
+mkrepo "$work/v6"; rm "$work/v6/UPSTREAM_VERSION"
+mkdir -p "$work/v6/lines/126"; printf '1.26.5\n' > "$work/v6/lines/126/UPSTREAM_VERSION"
+(cd "$work/v6" && git add -A) >/dev/null 2>&1
+(cd "$work/v6" && sh "$S" >/dev/null) || { echo "FAIL per-line upstream should pass"; exit 1; }
 
 echo "PASS: check-family-conventions"

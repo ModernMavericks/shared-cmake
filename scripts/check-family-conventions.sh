@@ -92,4 +92,29 @@ ci_mentions 'publish-release.yml' || ci_mentions '--notes-file' || ci_mentions '
           "publish via publish-release.yml@v1, or pass --notes-file / body_path when creating the release"
 
 [ "$status" -eq 0 ] && echo "check-family-conventions: ok"
+# 7. VERSION is DERIVED, not committed. The shipped state lives in tags; a committed VERSION is a
+# second answer to "what version is this?" and it drifts -- container-tools built -mavericks.14 from a
+# committed file that still said .2, which also made its tag path (tag must equal VERSION)
+# unsatisfiable. An UNTRACKED VERSION in the tree is fine and expected: it is a build product.
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  if git ls-files --error-unmatch VERSION >/dev/null 2>&1; then
+    fail "VERSION is committed — it is a build product, and the committed copy goes stale while tags move on" \
+         "git rm --cached VERSION; add /VERSION to .gitignore; commit UPSTREAM_VERSION instead"
+  fi
+else
+  # Not a checkout: the gate cannot see what is tracked. Say so rather than pass silently.
+  echo "check-family-conventions: not a git checkout — cannot check whether VERSION is committed" >&2
+  status=1
+fi
+
+# ...and something must be able to SUPPLY the upstream version: a committed UPSTREAM_VERSION, one per
+# line for a repo shipping parallel lines (golang), or a script that derives it from the pin (ed25519
+# reads the pinned commit's date; tailscale reads upstream's own VERSION.txt).
+if [ ! -f UPSTREAM_VERSION ] \
+   && [ -z "$(ls lines/*/UPSTREAM_VERSION 2>/dev/null || true)" ] \
+   && [ -z "$(ls build/derive-upstream-version.sh scripts/derive-upstream-version.sh 2>/dev/null || true)" ]; then
+  fail "no UPSTREAM_VERSION and nothing to derive one — the version cannot be computed" \
+       "commit UPSTREAM_VERSION (bare x.y.z or a date), or add build/derive-upstream-version.sh"
+fi
+
 exit "$status"
