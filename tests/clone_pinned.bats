@@ -51,3 +51,12 @@ teardown() { rm -rf "$WORK"; }
   [ "$status" -eq 0 ]
   [ "$(git -C "$DEST" rev-parse HEAD)" = "$A" ]
 }
+
+# stdout must stay clean -- progress goes to stderr -- so a caller with a stdout contract (e.g.
+# ed25519's fetch-ed25519.sh prints only the src dir) can capture it. Regression: 2026-07-31.
+@test "stdout is empty on fetch AND on cache hit (progress goes to stderr)" {
+  out="$(sh "$HELPER" "$UP" v1 "$A" "$DEST" 2>/dev/null)"
+  [ -z "$out" ]
+  out="$(sh "$HELPER" "$UP" v1 "$A" "$DEST" 2>/dev/null)"   # second call: cache hit
+  [ -z "$out" ]
+}

@@ -25,7 +25,7 @@ verify() {  # $1 = a git worktree; HEAD must be DIGEST (when a DIGEST is pinned)
 
 if [ -d "$DEST/.git" ]; then
   verify "$DEST" || exit 1        # a cached checkout must still be the pinned commit
-  echo "src cache hit: $DEST"
+  echo "src cache hit: $DEST" >&2
   exit 0
 fi
 
@@ -46,4 +46,4 @@ fi
 verify "$tmp" || { rm -rf "$tmp"; exit 1; }
 rm -rf "$DEST"
 mv "$tmp" "$DEST"
-echo "src cached ($REF@${DIGEST:-unpinned}): $DEST"
+echo "src cached ($REF@${DIGEST:-unpinned}): $DEST" >&2   # progress -> stderr; stdout stays clean for callers that capture it
