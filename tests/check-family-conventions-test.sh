@@ -180,4 +180,27 @@ printf 'name: x\non: [push]\njobs:\n  a:\n   steps:\n  - bad indent\n' > "$work/
 if out="$(cd "$work/y2" && sh "$S" 2>&1)"; then echo "FAIL broken yaml should fail"; exit 1; fi
 printf '%s\n' "$out" | grep -q 'broken.yml' || { echo "FAIL should name the file: $out"; exit 1; }
 
+# 9. Every build ingredient must be able to auto-update. An ingredient nobody tracks is one that
+# silently goes stale: swift-runtime's swift-toolchain pin sat at 6.3.3-mavericks.1 while that repo
+# shipped .3, because updating it meant a human fetching and pasting two SHA256s. Wiring a Renovate
+# customManager is the doctrine; a genuine exception (no datasource exists at all) must SAY so.
+mkrepo "$work/r1"
+printf '# Build ingredients\n\n| I | Pinned in | Renovate | On a bump |\n|---|---|---|---|\n| Go | `x` | ✅ github-releases | repackage |\n' \
+  > "$work/r1/INGREDIENTS.md"
+(cd "$work/r1" && sh "$S" >/dev/null) || { echo "FAIL tracked ingredient should pass"; exit 1; }
+
+# an ingredient marked untracked fails, and the message points at the fix
+mkrepo "$work/r2"
+printf '# Build ingredients\n\n| I | Pinned in | Renovate | On a bump |\n|---|---|---|---|\n| Swift | `build.sh` | ❌ untracked | manual |\n' \
+  > "$work/r2/INGREDIENTS.md"
+if out="$(cd "$work/r2" && sh "$S" 2>&1)"; then echo "FAIL untracked ingredient should fail"; exit 1; fi
+printf '%s\n' "$out" | grep -qi 'customManager\|renovate' || { echo "FAIL should name the fix: $out"; exit 1; }
+
+# ...but a genuinely UNTRACKABLE input (no datasource exists -- golang's CA bundle) is allowed when
+# it says so. The rule is "wire it or explain why you cannot", not "never write ❌".
+mkrepo "$work/r3"
+printf '# Build ingredients\n\n| I | Pinned in | Renovate | On a bump |\n|---|---|---|---|\n| CA bundle | `vendor/cacert.pem` | ❌ **untrackable — manual refresh** (see below) | watched path |\n' \
+  > "$work/r3/INGREDIENTS.md"
+(cd "$work/r3" && sh "$S" >/dev/null) || { echo "FAIL declared-untrackable should pass"; exit 1; }
+
 echo "PASS: check-family-conventions"

@@ -123,6 +123,30 @@ waits for a green build. That only works if **your repo produces a CI status che
   check that never reports and **blocks every merge**. Without the required check, `allow_auto_merge` is
   inert and the PR merges only on Renovate's next scan (still gated, just not instant).
 
+**Every build ingredient must be able to auto-update — wire a customManager when the standard managers
+don't reach it.** An ingredient nobody tracks goes stale silently and nothing reports it: swift-runtime
+pinned `swift-toolchain` at `6.3.3-mavericks.1` while that repo shipped `.3`, for months, because
+moving the pin meant a human fetching and pasting two SHA256s. `check-family-conventions.sh` fails an
+`INGREDIENTS.md` row marked ❌ unless it says **untrackable**.
+
+**A pinned hash is usually what blocks the bot.** A hash can only vouch for bytes someone has already
+seen, so every bump needs a human to paste a new one — which is exactly the step automation cannot
+take. Two ways out, both in use here:
+
+- **Verify against upstream's own published `SHA256SUMS`** for the pinned release. That vouches for a
+  version that does not exist yet, so Renovate only has to move the *ref*. container-tools does this
+  for the golang toolchain; swift-runtime does it for the swift-toolchain build environment. Prefer
+  this whenever the upstream is a ModernMavericks repo — `publish-release.yml` regenerates
+  `SHA256SUMS` over everything it attaches, so the file is always there. Fail if the asset is **not
+  listed**, rather than passing an empty expectation to `shasum` — unverified must never look like a
+  pass.
+- **Verify by signature** where upstream publishes no checksums file: swift-toolchain checks the
+  swift.org `.pkg` against its **signer identity**, which is stable across releases.
+
+**Derive, never repeat, anything computable from a pin.** `SWIFT_TAG="swift-${SWIFT_VERSION}-RELEASE"`,
+not a second literal — Renovate rewrites one line, and a repeated value left behind builds something
+other than what the pin names. Both swift repos learned this the same way.
+
 **Automerge policy: if it builds and passes, it ships** — patch, minor **and** major alike. The build
 is the gate (`ignoreTests: false`), and breakage that gets through is fixed forward in a
 `-mavericks.N+1` release, which costs less than a human reviewing every routine bump. Most repos
@@ -234,8 +258,25 @@ suffix** moves for a packaging-only re-release (recipe/patch/updater/CA change, 
 
 - **`UPSTREAM_VERSION`** — committed, bare (`1.4.2`, no `v`), Renovate-edits it. Read by `build/lib.sh`'s
   `upstream_version()`.
-- **`VERSION`** — `<upstream>-mavericks.N`, **gitignored (`/VERSION`) and written by the workflow** (the
-  `ver` step) or a local test. Read by CMake (`file(STRINGS VERSION …)`). Don't commit it.
+- **`VERSION`** — `<upstream>-mavericks.N`, **a BUILD PRODUCT**: gitignored (`/VERSION`), written by
+  `resolve-version.sh`, never committed. `check-family-conventions.sh` fails a *tracked* one. In CMake
+  use `mavericks_resolve_version(MYVAR)` (from the package Config, so plain `find_package` is enough —
+  no `include(Mavericks)` needed) rather than `file(STRINGS VERSION …)`, which only ever worked because
+  four repos committed the file.
+- **`scripts/resolve-version.sh [auto|local]`** — the one way to learn the version at build time. It
+  reuses an existing `VERSION` so **every job in one run agrees**, and derives+writes one otherwise.
+  An empty `VERSION` fails loudly: artifacts named `-mavericks.` with nothing in front look almost right.
+- **`scripts/release-mode.sh`** — answers "is this run a repackage?" once, from the event. Every job
+  that resolves a version must use it. container-tools built one `.pkg` from two jobs that disagreed —
+  `build-macos` resolved `-mavericks.15`, `build-iso` resolved `.14`, same run, same commit — because
+  a parallel job has no way to know a repackage is in progress. Making one job `needs:` the other fixes
+  it by serialising builds that have no reason to wait; a shared decision does not.
+- **Any job that resolves a version needs `fetch-depth: 0`** — N comes from the tags. Without them CI
+  labels every build `-mavericks.1` and hides what it is really building.
+- **Where the upstream comes from a pin rather than a committed file**, the repo has
+  `build/derive-upstream-version.sh` or `scripts/derive-upstream-version.sh` writing `UPSTREAM_VERSION`
+  (ed25519: the pinned commit's date; tailscale: upstream's own `VERSION.txt`; the swift repos: their
+  `SWIFT_VERSION` pin). It must run **before anything configures CMake**.
 - **`build/version.sh <auto|local>`** computes the full version + release decision (copy verbatim):
   `auto` → N=1/`RELEASE=yes` for a new upstream (no tag yet), else current N/`RELEASE=no`;
   `local` → N=max+1/`RELEASE=yes` (a packaging-only repackage). N resets to 1 whenever `UPSTREAM_VERSION`
@@ -243,6 +284,10 @@ suffix** moves for a packaging-only re-release (recipe/patch/updater/CA change, 
 - Scripts derive `REPO_ROOT` themselves and source `lib.sh`; `versions.sh` reads `GO_VERSION`-equivalent
   from `UPSTREAM_VERSION` and falls back to `version.sh auto` when `VERSION` is absent (so a fresh checkout
   builds without a committed `VERSION`).
+- **Repackage ownership can be declared by KEY, not just by path**: `own-upstream-paths:
+  "pins.env:SWIFT_VERSION"`. Use it when a repo keeps its own-upstream pin and its ingredient pins in
+  one file — declaring the whole file own-upstream skips every repackage, and declaring it not-own
+  publishes twice (`-mavericks.1` from the push, `.2` from the dispatched repackage).
 - **A test that encodes the upstream version MUST read it from `UPSTREAM_VERSION`, never hardcode** — a
   hardcoded version fails its own CI on the next Renovate bump and blocks the automerge.
 
@@ -507,6 +552,9 @@ none of which anything detected. A convention that is not checked is a conventio
 | `INGREDIENTS.md` exists | An input nobody documented is an input nobody is watching |
 | No Renovate key the shared preset already sets | A local copy silently stops tracking the preset when the preset changes |
 | The release publishes a notes body | An empty Release body ships unnoticed — tailscale's did, on every release |
+| `VERSION` is **not committed** (an untracked one is fine — it's a build product) | The committed copy drifts: container-tools built `-mavericks.14` from a file saying `.2`, which also made its tag path (`tag == VERSION`) impossible to satisfy |
+| Every workflow parses **with duplicate keys rejected** | A second `with:` on one step is legal YAML — last key wins — so ordinary parsers accept it and GitHub refuses to run the workflow. No other gate can catch it, because CI never starts |
+| No `INGREDIENTS.md` row marked ❌ unless it says **untrackable** | An ingredient nobody tracks goes stale silently; a bare ❌ reads as an oversight rather than a decision |
 
 Wire it with the reusable workflow — three lines, and it never changes when a check is added:
 

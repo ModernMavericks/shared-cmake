@@ -153,4 +153,26 @@ sys.exit(rc)
 PYEOF
 fi
 
+# 9. Every build ingredient must be able to AUTO-UPDATE. An ingredient nobody tracks goes stale
+# silently: swift-runtime's swift-toolchain pin sat at 6.3.3-mavericks.1 while that repo shipped .3,
+# because moving it meant a human fetching and pasting two SHA256s. Wiring a Renovate customManager is
+# the doctrine -- and where a pinned hash is what blocks the bot, verify against the upstream's own
+# published SHA256SUMS instead, which vouches for bytes nobody has seen yet.
+#
+# A genuine exception (no datasource exists at all -- golang's CA bundle) is allowed, but must SAY
+# "untrackable" rather than leaving a bare ❌ that reads as an oversight.
+if [ -f INGREDIENTS.md ]; then
+  while IFS= read -r line; do
+    case "$line" in
+      *❌*)
+        case "$line" in
+          *[Uu]ntrackable*) : ;;   # declared, with a reason nearby
+          *) fail "INGREDIENTS.md marks an ingredient as not auto-updating: $(printf '%s' "$line" | cut -c1-60)..." \
+                  "wire a Renovate customManager for it (a pinned hash that blocks the bot can verify against upstream's published SHA256SUMS instead), or mark it **untrackable** and say why" ;;
+        esac
+        ;;
+    esac
+  done < INGREDIENTS.md
+fi
+
 exit "$status"
