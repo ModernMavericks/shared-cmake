@@ -25,6 +25,12 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
 
+# Version resolution is included HERE, not left to include(Mavericks), because every product needs it
+# and not every product includes that umbrella: container-tools' root is project(LANGUAGES NONE) and
+# deliberately skips the AppleClang gate, so find_package alone left mavericks_resolve_version()
+# undefined and the configure failed. Defining a function is language-agnostic and costs nothing.
+include(MavericksVersion)
+
 # Convenience: expose the presets file's installed path (CMakePresets.json can
 # $env-include it; it cannot see find_package results directly).
 set(MavericksSharedCMake_PRESETS "${CMAKE_CURRENT_LIST_DIR}/mavericks-presets.json")
