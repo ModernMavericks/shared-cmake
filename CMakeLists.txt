@@ -59,6 +59,8 @@ find_program(BATS_EXECUTABLE bats)
 if(BATS_EXECUTABLE)
   add_test(NAME mavericks-fetch
     COMMAND ${BATS_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/mavericks_fetch.bats)
+  add_test(NAME clone-pinned
+    COMMAND ${BATS_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/clone_pinned.bats)
   add_test(NAME compat-guard
     COMMAND ${BATS_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/compat_guard.bats)
   add_test(NAME gen-appcast

@@ -396,10 +396,38 @@ upstream publishes — pick the strongest available and note the choice:
 |---|---|---|
 | a checksum feed/file | fetch that checksum, verify the download against it (frozen by the pinned version) | golang → go.dev `?mode=json` SHA256 |
 | signed artifacts | signature/identity (verifies a version that doesn't exist yet) | swift-toolchain → Apple installer signer |
-| only a git tag | the pinned tag itself (TOFU via `UPSTREAM_VERSION`); no in-repo hash | legacysupport → GitHub tag tarball |
+| a git source we clone | pin the **commit digest** and verify the checkout against it | container-tools/tailscale/ed25519 → git-refs |
 
 Record the resulting digest in `SHA256SUMS` for the record even when the gate is a signature. **Don't
 invent a hand-maintained pinned hash when upstream already publishes one** — that's a divergence to avoid.
+
+### Git sources: digest-pin, don't TOFU (and don't hand-roll the clone)
+
+When you build from a **git clone** (not a checksummed tarball or a signed artifact), pin the **commit
+digest**, not just the tag — a git tag is mutable, so a tag-only pin trusts it not to move. Use the
+shared **`scripts/clone_pinned.sh REPO REF DIGEST DEST`** (bats-tested): it fetches the pinned source
+into a shared cache and fails closed unless the checkout is exactly `DIGEST` (moved/forced tag, MITM,
+wrong ref all bail). **Do not vendor your own `clone_pinned.sh`** — consume shared-cmake's.
+
+Renovate keeps `REF` + `DIGEST` in sync with a `git-refs`/`currentDigest` customManager, so a bump
+updates both and the pin auto-advances. The pin file carries both, e.g. `components/foo/version`:
+
+```
+REPO=https://github.com/acme/foo.git
+REF=v1.2.3
+DIGEST=<40-hex-commit-sha>
+```
+```json
+{ "customType": "regex",
+  "managerFilePatterns": ["/^components/[^/]+/version$/"],
+  "matchStrings": ["REPO=(?<packageName>\\S+?)\\.git\\s+REF=(?<currentValue>\\S+)\\s+DIGEST=(?<currentDigest>[0-9a-f]{40})"],
+  "datasourceTemplate": "git-refs" }
+```
+
+There is deliberately **no separately-maintained artifact hash** (`golden.sha256`) and **no manual
+on-box "bless" step**: the commit digest *is* the reproducibility pin, Renovate bumps it, and a
+per-bump characterization/fingerprint of the *built* output only blocks merges without a shippability
+signal (see the auto-merge intent above — fix runtime regressions in `-mavericks.2`).
 
 ## Sparkle updater
 
