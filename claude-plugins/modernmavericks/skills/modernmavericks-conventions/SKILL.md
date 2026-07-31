@@ -203,6 +203,28 @@ separate, deliberate grant. Decide per person:
 - **The trade-off:** adding someone to bypass removes the build gate for *their own* direct commits —
   the protection you just built. Default to Write + PR; reserve bypass/admin for trusted maintainers.
 
+## Product naming
+
+Two registers, so the app reads as a recognizable "Mavericks ___" product while longer strings stay
+natural (and, for a repackaged third-party product, nominative rather than co-branded):
+
+- **App identity — "Mavericks Foo"** (brand-forward, discoverable, matches the `mavericks-foo` repo name).
+  Use for: the `.app` bundle filename, `CFBundleName`/`CFBundleDisplayName`, the Sparkle updater
+  `PRODUCT_NAME` (drives "A new version of ___ is available"), and the updater `CONFIRM_TITLE`.
+- **Prose / longer strings — "Foo for Mavericks"** (descriptive; reads as "the real Foo, for the
+  Mavericks OS"). Use for: the `.pkg` installer `--title`, the appcast `--channel-title`, README prose,
+  and release notes.
+
+"Mavericks" here is the **OS** (10.9), so "Mavericks Tailscale" = "the Mavericks build of Tailscale" —
+which helps rather than hurts on the trademark front; keep the "unofficial community build, not affiliated
+with <upstream>" disclaimer regardless. Where the product name is a third-party trademark used
+nominatively (Tailscale), this is fine; where you can't use the upstream noun at all (Docker → "Container
+Tools"), the descriptor already IS your name, so "Mavericks Container Tools" is simply your product line.
+
+Never rename **functional identifiers** to match: bundle IDs (`dev.modernmavericks.*`), executable names,
+`launchd` labels, `hostinfo.SetPackage`/equivalent, internal helper bundles (e.g. the `*Updater.app`), and
+asset filenames stay as they are. A `.app` name with a space is fine; quote the path in shell/plists.
+
 ## Versioning
 
 **Two independent bump axes.** The **upstream component** moves when upstream releases: Renovate edits
