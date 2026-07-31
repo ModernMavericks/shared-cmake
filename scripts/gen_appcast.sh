@@ -98,6 +98,18 @@ CHANNEL_TITLE="$1"; VER="$2"; URL="$3"; MINOS="$4"; NOTES_FILE="$5"; ENCLOSURE_A
 # stays in <sparkle:shortVersionString>. Must match MavericksSparkle.cmake's CFBundleVersion derivation.
 BUILD_VER=$(printf '%s' "$VER" | sed 's/-mavericks\./\./')
 
+# Fail if the derived key is not purely dotted-numeric (X.Y.Z.N): SUStandardVersionComparator only
+# totally orders that domain, and every "update says I'm up to date" bug lived OUTSIDE it (a stray
+# letter or an unstripped "-mavericks." makes two versions compare EQUAL). Catch it here, at the source
+# every product's appcast flows through, rather than discovering it live weeks later. The monotonic
+# "> previous release" half is assert_appcast_upgradeable.sh, which needs the prior release to compare.
+case "$BUILD_VER" in
+  ''|.*|*.|*..*|*[!0-9.]*)
+    echo "gen_appcast: sparkle:version '$BUILD_VER' (from version '$VER') is not purely dotted-numeric --" >&2
+    echo "  SUStandardVersionComparator can only order X.Y.Z.N, so auto-update would misfire on it." >&2
+    exit 1;;
+esac
+
 [ -f "$NOTES_FILE" ] || { echo "release notes not found: $NOTES_FILE" >&2; exit 1; }
 [ -s "$NOTES_FILE" ] || { echo "release notes empty: $NOTES_FILE" >&2; exit 1; }
 
