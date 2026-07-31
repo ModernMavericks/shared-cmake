@@ -29,6 +29,7 @@ for t in tests/*.sh tests/*.bats; do
   # `rc=0; cmd || rc=$?` and not `cmd; rc=$?`: under set -e the bare form exits the runner on the
   # first failing OR SKIPPING test, so nothing after it is ever reported.
   rc=0
+  log="$(mktemp)"
   case "$t" in
     *.bats)
       # Missing bats is a FAILURE, not a skip: install@v1 puts it on every runner, so its absence
@@ -36,16 +37,20 @@ for t in tests/*.sh tests/*.bats; do
       # the exact hole this runner exists to close.
       command -v bats >/dev/null 2>&1 || {
         echo "FAIL $t (bats not installed -- install@v1 provides it in CI; 'brew install bats-core' locally)"
-        status=1; continue
+        status=1; rm -f "$log"; continue
       }
-      bats "$t" >/dev/null 2>&1 || rc=$? ;;
-    *) sh "$t" >/dev/null 2>&1 || rc=$? ;;
+      bats "$t" > "$log" 2>&1 || rc=$? ;;
+    *) sh "$t" > "$log" 2>&1 || rc=$? ;;
   esac
   case "$rc" in
     0)  echo "PASS $t" ;;
     77) echo "SKIP $t (unmet prerequisites)" ;;
-    *)  echo "FAIL $t (exit $rc)"; status=1 ;;
+    # Show what a failing test SAID. "FAIL tests/x.sh (exit 1)" with the output discarded leaves
+    # whoever reads CI unable to tell a broken test from a broken product; a passing test stays quiet
+    # so the signal does not drown.
+    *)  echo "FAIL $t (exit $rc)"; sed 's/^/    | /' "$log"; status=1 ;;
   esac
+  rm -f "$log"
 done
 [ "$ran" -gt 0 ] || echo "run-repo-tests: tests/ has no *.sh or *.bats at top level"
 exit "$status"

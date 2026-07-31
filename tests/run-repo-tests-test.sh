@@ -38,4 +38,20 @@ printf '%s\n' "$out" | grep -qi 'bats' || { echo "FAIL should say bats is missin
 # with bats present it runs normally
 sh "$S" >/dev/null || { echo "FAIL bats file should pass when bats is installed"; exit 1; }
 
+# A failing test must SAY something. Reporting "FAIL tests/x.sh (exit 1)" and discarding the output
+# leaves whoever reads CI with no way to tell a broken test from a broken product -- which is exactly
+# the position ed25519 put us in.
+printf '#!/bin/sh\necho "the specific reason it broke"\nexit 1\n' > tests/e-loud.sh
+out="$(sh "$S" 2>&1 || true)"
+printf '%s\n' "$out" | grep -q 'the specific reason it broke' \
+  || { echo "FAIL a failing test's output must be shown; got: $out"; exit 1; }
+rm -f tests/e-loud.sh
+
+# ...and a PASSING test stays quiet, or the signal drowns
+printf '#!/bin/sh\necho "chatty but fine"\nexit 0\n' > tests/f-chatty.sh
+out="$(sh "$S" 2>&1 || true)"
+printf '%s\n' "$out" | grep -q 'chatty but fine' \
+  && { echo "FAIL a passing test should not print its output"; exit 1; }
+rm -f tests/f-chatty.sh
+
 echo "PASS: run-repo-tests"
