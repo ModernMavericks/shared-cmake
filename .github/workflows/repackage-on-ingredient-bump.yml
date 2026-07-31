@@ -53,6 +53,9 @@ jobs:
           SCR="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"
           before="$BEFORE"; case "$before" in ''|0000000000000000000000000000000000000000) before="HEAD~1";; esac
           CHANGED="$(git diff --name-only "$before" HEAD)"; export CHANGED
+          # The RESOLVED rev, not the raw event field: a path:KEY entry needs to read the file as it
+          # was, and github.event.before is all-zeros on a first push.
+          BEFORE="$before"; export BEFORE
           out="$(sh "$SCR/repackage-decision.sh")"
           echo "decision: $out"
           case "$out" in SKIP=*) exit 0;; esac
