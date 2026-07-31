@@ -138,6 +138,15 @@ fi
 # is a claim about INPUTS, which no payload inspection can settle -- so each variant records what it
 # used and this compares the records. Keys that SHOULD differ per variant are named, not guessed:
 # treating every difference as a fault would make the check unusable and then ignored.
+# Say what was compared. "ok" that also means "there were no records" is a check you cannot trust the
+# day the records stop shipping -- which is exactly how this one nearly went unnoticed.
+bi_files="$(sed -n 's/^build-info \([^ ][^ ]*\) .*/\1/p' "$facts" | sort -u | wc -l | tr -d ' ')"
+if [ "$bi_files" -gt 0 ]; then
+  echo "conformance: ingredients: compared $bi_files build records"
+else
+  echo "conformance: ingredients: no build records in this release (nothing to compare)"
+fi
+
 per_variant=" variant arch prefix pkg identifier "
 for key in $(sed -n 's/^build-info [^ ][^ ]* \([^ ][^ ]*\) .*/\1/p' "$facts" | sort -u); do
   case "$per_variant" in *" $key "*) continue ;; esac

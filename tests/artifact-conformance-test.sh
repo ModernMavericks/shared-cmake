@@ -215,4 +215,20 @@ build-info build-info-cross.txt mls_version 1.5.2-mavericks.1
 pkg n.pkg 1.26.5-mavericks.5 10.9.5 dev.modernmavericks.golang.go126
 asset n.pkg 10'
 
+# "ok" must not be indistinguishable from "compared nothing". A check whose silence means both
+# "agreed" and "there was nothing to look at" cannot be trusted the day the records stop shipping.
+out="$(printf '%s\n' 'expected 1.0.0-mavericks.1
+build-info build-info-a.txt commit abc
+build-info build-info-b.txt commit abc
+pkg p.pkg 1.0.0-mavericks.1 10.9.5 dev.modernmavericks.x
+asset p.pkg 10' | sh "$S")"
+printf '%s\n' "$out" | grep -qi 'compared 2' \
+  || { echo "FAIL should say how many records it compared; got: $out"; exit 1; }
+
+out="$(printf '%s\n' 'expected 1.0.0-mavericks.1
+pkg p.pkg 1.0.0-mavericks.1 10.9.5 dev.modernmavericks.x
+asset p.pkg 10' | sh "$S")"
+printf '%s\n' "$out" | grep -qi 'no build records' \
+  || { echo "FAIL should say when there was nothing to compare; got: $out"; exit 1; }
+
 echo "PASS: artifact-conformance"
