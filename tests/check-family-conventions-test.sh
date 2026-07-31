@@ -164,4 +164,20 @@ mkdir -p "$work/v6/lines/126"; printf '1.26.5\n' > "$work/v6/lines/126/UPSTREAM_
 (cd "$work/v6" && git add -A) >/dev/null 2>&1
 (cd "$work/v6" && sh "$S" >/dev/null) || { echo "FAIL per-line upstream should pass"; exit 1; }
 
+# 8. Workflow YAML must parse with DUPLICATE KEYS REJECTED. A second `with:` on one step is valid
+# YAML (last key wins) and ordinary parsers accept it, but GitHub refuses to run the workflow: the run
+# shows up named after the file path, "likely failed because of a workflow file issue", with no step
+# logs at all. swift-runtime shipped exactly that.
+mkrepo "$work/y1"
+awk '{print} /^    steps:$/ && !d {print "      - uses: actions/checkout@v7"; print "        with:"; print "          fetch-depth: 0"; print "        with:"; print "          fetch-depth: 1"; d=1}' \
+  "$work/ok/.github/workflows/release.yml" > "$work/y1/.github/workflows/release.yml"
+if out="$(cd "$work/y1" && sh "$S" 2>&1)"; then echo "FAIL duplicate key should fail"; exit 1; fi
+printf '%s\n' "$out" | grep -qi 'duplicate' || { echo "FAIL should say duplicate: $out"; exit 1; }
+
+# malformed YAML fails too, naming the file
+mkrepo "$work/y2"
+printf 'name: x\non: [push]\njobs:\n  a:\n   steps:\n  - bad indent\n' > "$work/y2/.github/workflows/broken.yml"
+if out="$(cd "$work/y2" && sh "$S" 2>&1)"; then echo "FAIL broken yaml should fail"; exit 1; fi
+printf '%s\n' "$out" | grep -q 'broken.yml' || { echo "FAIL should name the file: $out"; exit 1; }
+
 echo "PASS: check-family-conventions"

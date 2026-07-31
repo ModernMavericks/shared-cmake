@@ -117,4 +117,40 @@ if [ ! -f UPSTREAM_VERSION ] \
        "commit UPSTREAM_VERSION (bare x.y.z or a date), or add build/derive-upstream-version.sh"
 fi
 
+# 8. Every workflow must PARSE, with duplicate keys rejected. A second `with:` on one step is legal
+# YAML -- last key wins, and every ordinary parser accepts it -- but GitHub refuses to run the
+# workflow: the run appears named after the file path, "likely failed because of a workflow file
+# issue", with no step logs to read. Nothing else in CI can catch this, because CI never starts.
+if [ -n "$CI_FILES" ] && command -v python3 >/dev/null 2>&1; then
+  # shellcheck disable=SC2086  # deliberate word-split list of paths
+  python3 - $CI_FILES <<'PYEOF' || status=1
+import sys, yaml
+
+class Strict(yaml.SafeLoader):
+    pass
+
+def no_duplicate_keys(loader, node, deep=False):
+    seen = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in seen:
+            raise ValueError("duplicate key %r on line %d" % (key, key_node.start_mark.line + 1))
+        seen.add(key)
+    return yaml.SafeLoader.construct_mapping(loader, node, deep)
+
+Strict.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, no_duplicate_keys)
+
+rc = 0
+for path in sys.argv[1:]:
+    try:
+        with open(path) as fh:
+            yaml.load(fh, Strict)
+    except Exception as exc:
+        sys.stderr.write("check-family-conventions: %s does not parse: %s\n" % (path, exc))
+        sys.stderr.write("    fix: GitHub rejects the whole workflow -- it never runs, so no other gate sees this\n")
+        rc = 1
+sys.exit(rc)
+PYEOF
+fi
+
 exit "$status"
