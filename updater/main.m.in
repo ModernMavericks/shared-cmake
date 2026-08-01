@@ -8,6 +8,7 @@
 // ourselves (below) and link the real framework binary. Same source builds on clang 6.0 (dev) and
 // modern clang (CI). Delegate = informal protocol (respondsToSelector:).
 #import <Cocoa/Cocoa.h>
+#include "relaunch_decision.h"   // pure post-relaunch decision (unit-tested; see tests/relaunch_decision.bats)
 
 @interface SUUpdater : NSObject
 + (SUUpdater *)sharedUpdater;
@@ -48,6 +49,10 @@ static NSTimer *gWatchdog = nil;
 // Sparkle 1.x relaunches the host after a .pkg install and there is no config to suppress it. We drop
 // a marker just before relaunch so the relaunched instance exits quietly instead of re-checking.
 static NSString *const kRelaunchMarker = @"@MAVERICKS_RELAUNCH_MARKER@";
+// The display version Sparkle last offered, remembered so a post-relaunch launch can tell whether the
+// install actually landed. Persisted to defaults (kPendingVersionKey) just before Sparkle relaunches us.
+static NSString *const kPendingVersionKey = @"MavPendingUpdateVersion";
+static NSString *gFoundVersion = nil;
 
 @interface MavericksUpdaterDelegate : NSObject   // informal SUUpdaterDelegate (invoked via respondsToSelector:)
 @end
@@ -55,6 +60,12 @@ static NSString *const kRelaunchMarker = @"@MAVERICKS_RELAUNCH_MARKER@";
 - (void)updaterWillRelaunchApplication:(SUUpdater *)updater {
     (void)updater;
     [[NSData data] writeToFile:kRelaunchMarker atomically:YES];
+    // Persist the version being installed so the relaunched instance can detect an install that silently
+    // failed (intermittent Sparkle -60008) by comparing this against its own (post-install) bundle version.
+    if (gFoundVersion.length) {
+        [[NSUserDefaults standardUserDefaults] setObject:gFoundVersion forKey:kPendingVersionKey];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+    }
 }
 - (void)terminateNow { NSLog(@"[@MAVERICKS_LOG_PREFIX@] terminating"); [NSApp terminate:nil]; }
 - (void)cancelWatchdog { [gWatchdog invalidate]; gWatchdog = nil; }
@@ -66,6 +77,7 @@ static NSString *const kRelaunchMarker = @"@MAVERICKS_RELAUNCH_MARKER@";
 - (void)updater:(SUUpdater *)updater didFindValidUpdate:(SUAppcastItem *)item {
     (void)updater;
     NSString *v = [item respondsToSelector:@selector(displayVersionString)] ? [item displayVersionString] : nil;
+    gFoundVersion = v;   // remember the target so a post-relaunch check can tell if the install landed
     if (strlen(MAVERICKS_PANE_HINT_KEY) > 0) {
         // Pane-hint mode (trackpad2): record the available version for a host UI (About tab) to surface.
         if (v.length) {
@@ -190,23 +202,27 @@ int main(int argc, const char **argv) {
         if ([fm fileExistsAtPath:kRelaunchMarker]) {
             NSDate *stamp = [[fm attributesOfItemAtPath:kRelaunchMarker error:NULL] fileModificationDate];
             BOOL fresh = stamp && [[NSDate date] timeIntervalSinceDate:stamp] < 300.0;
-            if (gBackground) {
-                // A fresh marker means an update JUST installed. The postinstall reloads the
-                // daily-check LaunchAgent, whose RunAtLoad fires a background instance mid-install --
-                // don't run a redundant check right after an install, and DON'T consume the marker:
-                // leave it so Sparkle's FOREGROUND relaunch shows the single "updated" confirmation
-                // (whichever races first must not steal it). Only a STALE marker is cleared here.
-                if (fresh) {
+            NSString *pending = [[NSUserDefaults standardUserDefaults] stringForKey:kPendingVersionKey];
+            mav_relaunch_action_t act = mav_relaunch_decide(1, fresh ? 1 : 0, gBackground ? 1 : 0,
+                                                            pending.UTF8String, selfVersion.UTF8String);
+            switch (act) {
+                case MAV_RELAUNCH_BG_KEEP_EXIT:
+                    // Fresh marker => an update JUST installed; the postinstall reloads the daily agent
+                    // whose RunAtLoad fires this background instance mid-install. Don't re-check, and KEEP
+                    // the marker so Sparkle's FOREGROUND relaunch shows the single confirmation.
                     NSLog(@"[@MAVERICKS_LOG_PREFIX@] fresh post-install marker; background -> exit (no check, marker kept)");
                     return 0;
-                }
-                [fm removeItemAtPath:kRelaunchMarker error:NULL];   // stale -> clear, fall through to a check
-            } else {
-                [fm removeItemAtPath:kRelaunchMarker error:NULL];   // foreground consumes the marker
-                if (fresh) {
-                    // The update changed the kext/daemon/pane, not this helper, so there's otherwise NO
-                    // visible signal -- show one confirmation. Our own (just-replaced) bundle version IS
-                    // the new version. Freshness gate stops a stale marker from popping a bogus dialog.
+                case MAV_RELAUNCH_STALE_CHECK:
+                    // Stale marker from an interrupted/killed flow -> clear it and fall through to a check.
+                    [fm removeItemAtPath:kRelaunchMarker error:NULL];
+                    break;
+                case MAV_RELAUNCH_SHOW_UPDATED: {
+                    // Install landed (our bundle IS the new version). Consume the marker + pending key and
+                    // show the one "updated" confirmation (the update changed the kext/daemon/pane, not this
+                    // helper, so there is otherwise no visible signal).
+                    [fm removeItemAtPath:kRelaunchMarker error:NULL];
+                    [[NSUserDefaults standardUserDefaults] removeObjectForKey:kPendingVersionKey];
+                    [[NSUserDefaults standardUserDefaults] synchronize];
                     NSLog(@"[@MAVERICKS_LOG_PREFIX@] post-install relaunch; showing 'updated to %@' confirmation",
                           selfVersion.length ? selfVersion : @"(unknown)");
                     [NSApp activateIgnoringOtherApps:YES];
@@ -226,7 +242,41 @@ int main(int argc, const char **argv) {
                     }
                     return 0;
                 }
-                // stale foreground marker -> fall through to a normal check
+                case MAV_RELAUNCH_OFFER_RETRY: {
+                    // Install silently failed (intermittent Sparkle -60008): our bundle is still the old
+                    // version. Offer an honest retry instead of a bogus "updated" confirmation.
+                    [fm removeItemAtPath:kRelaunchMarker error:NULL];
+                    NSLog(@"[@MAVERICKS_LOG_PREFIX@] install did not complete (still %@, wanted %@) -> offering retry",
+                          selfVersion.length ? selfVersion : @"(unknown)", pending.length ? pending : @"(unknown)");
+                    [NSApp activateIgnoringOtherApps:YES];
+                    NSAlert *retry = [[NSAlert alloc] init];
+                    [retry setMessageText:@"@MAVERICKS_PRODUCT_NAME@ update didn't finish"];
+                    [retry setInformativeText:pending.length
+                        ? [NSString stringWithFormat:@"The update to %@ didn't complete — a known intermittent macOS issue. Retry now?", pending]
+                        : @"The update didn't complete — a known intermittent macOS issue. Retry now?"];
+                    [retry addButtonWithTitle:@"Retry"];
+                    [retry addButtonWithTitle:@"Later"];
+                    NSInteger resp = [retry runModal];
+                    if (resp == NSAlertFirstButtonReturn) {
+                        // Re-drive an interactive check in a fresh process (same mechanism as the
+                        // notification "Install" path). It re-finds the already-downloaded update and
+                        // re-offers Install; per Sparkle #1079 the second attempt almost always succeeds.
+                        NSLog(@"[@MAVERICKS_LOG_PREFIX@] retry accepted -> relaunching interactive check");
+                        // Clear the pending key symmetrically with the Later path; the relaunched --user
+                        // process re-sets it in updaterWillRelaunchApplication: if another install completes.
+                        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kPendingVersionKey];
+                        [[NSUserDefaults standardUserDefaults] synchronize];
+                        NSString *me = [[NSBundle mainBundle] executablePath];
+                        if (me) [NSTask launchedTaskWithLaunchPath:me arguments:@[@"--user"]];
+                    } else {
+                        NSLog(@"[@MAVERICKS_LOG_PREFIX@] retry declined -> clearing pending, exiting");
+                        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kPendingVersionKey];
+                        [[NSUserDefaults standardUserDefaults] synchronize];
+                    }
+                    return 0;
+                }
+                case MAV_RELAUNCH_NONE:
+                    break;   // marker present here, so unreachable; kept for switch completeness
             }
         }
 

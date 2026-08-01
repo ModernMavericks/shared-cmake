@@ -132,6 +132,7 @@ function(mavericks_add_updater_app)
 
   add_executable(${A_NAME} "${CMAKE_BINARY_DIR}/${A_NAME}-main.m")
   target_compile_options(${A_NAME} PRIVATE -fobjc-arc)
+  target_include_directories(${A_NAME} PRIVATE "${MAVERICKS_SHARED_DIR}/updater")  # relaunch_decision.h
   target_link_libraries(${A_NAME} PRIVATE
     "-F${A_SPARKLE_FRAMEWORK}/.." "-framework Sparkle" "-framework Cocoa"
     "-Wl,-rpath,@executable_path/../Frameworks")
