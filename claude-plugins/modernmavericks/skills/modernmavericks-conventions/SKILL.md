@@ -251,6 +251,26 @@ asset filenames stay as they are. A `.app` name with a space is fine; quote the 
 
 ## Versioning
 
+**First decide: does this repo PORT an external upstream, or is it its OWN upstream?** The `-mavericks.N`
+suffix means "our Nth repackage of *someone else's* thing." Most repos port an upstream and use the
+`<upstream>-mavericks.N` machinery below (including date-versioned ports — `mavericks-ed25519`
+`20221003-mavericks.N`, `mavericks-container-tools` `20260727-mavericks.N` — where `UPSTREAM_VERSION` is a
+date but they are still repackaging an upstream). A repo that is **its own upstream** — original
+ModernMavericks code, not a port (e.g. `mavericks-porthole`) — has no "repackage-of-someone-else" axis, so
+it **drops the `-mavericks` suffix** and versions itself directly:
+
+- **date-based `YYYYMMDD.N`** (`mavericks-porthole`; N counts the day's releases starting at `.1`, never
+  omitted) — the family's date form but *without* `-mavericks`, precisely because it is not a port;
+- **semver `vX.Y.Z`** (`mavericks-magic-trackpad2`), or dimmit's `v0.0.YYYYMMDD.N`.
+
+Mechanics for a self-upstream repo: `UPSTREAM_VERSION` (if used) is the repo's OWN version/date,
+hand-bumped (no Renovate datasource — nothing external to track). There is **no `resolve-version.sh`** (it
+hardcodes `-mavericks.`), so `release.yml` computes the version itself (e.g. `<date>.N` from the existing
+`<date>.*` tags, `fetch-depth: 0`). `VERSION` stays a gitignored build product; the family-conventions
+gate still applies unchanged (committed `UPSTREAM_VERSION` + uncommitted `VERSION` passes it), and you
+still publish via `publish-release.yml@v1`. **Everything below — the two bump axes, `resolve-version.sh`,
+`build/version.sh`, the `-mavericks.N` suffix — is for the PORT case.**
+
 **Two independent bump axes.** The **upstream component** moves when upstream releases: Renovate edits
 `UPSTREAM_VERSION`, and `version.sh auto` cuts `<new>-mavericks.1` (N resets to 1). The **`-mavericks.N`
 suffix** moves for a packaging-only re-release (recipe/patch/updater/CA change, upstream unchanged): via
