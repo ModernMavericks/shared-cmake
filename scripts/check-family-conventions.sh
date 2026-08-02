@@ -116,6 +116,21 @@ if [ ! -f UPSTREAM_VERSION ] \
        "commit UPSTREAM_VERSION (bare x.y.z or a date), or add build/derive-upstream-version.sh"
 fi
 
+# 7c. The version wrappers live in COMMITTED build/*.sh (build/version.sh, msc.sh, lib.sh, …); a
+# too-broad .gitignore (`build*/`, `build/`) silently ignores them. `git add` skips them without a
+# word, everything works locally, and only CI's fresh checkout fails — "sh: build/version.sh: No such
+# file or directory" — far from the cause. `git check-ignore` evaluates the path against .gitignore
+# regardless of whether the file is present, so this fires even from a checkout that already lost it.
+# Only for repos that actually use the wrappers (a workflow references build/version.sh, or it exists).
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  if ci_mentions 'build/version.sh' || [ -e build/version.sh ]; then
+    if git check-ignore -q build/version.sh 2>/dev/null; then
+      fail "build/version.sh is git-ignored — a too-broad .gitignore pattern (e.g. build*/) drops the committed version wrappers; local passes, CI's fresh checkout fails 'no build/version.sh'" \
+           "ignore only build OUTPUT dirs (/_build/, build-*/, build/work/) — never build/ itself"
+    fi
+  fi
+fi
+
 # 8. Every workflow must PARSE, with duplicate keys rejected. A second `with:` on one step is legal
 # YAML -- last key wins, and every ordinary parser accepts it -- but GitHub refuses to run the
 # workflow: the run appears named after the file path, "likely failed because of a workflow file
