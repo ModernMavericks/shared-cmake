@@ -23,6 +23,7 @@ install(FILES
   MavericksCompatGuard.cmake
   MavericksSparkle.cmake
   MavericksVersion.cmake
+  MavericksDecisions.cmake
   mavericks-presets.json
   DESTINATION "${_dest}")
 

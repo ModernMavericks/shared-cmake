@@ -33,3 +33,4 @@ include(RequireAppleClang)      # reject gcc / Homebrew / pkgsrc clang
 include(MavericksFetch)         # mavericks_fetch_sdk()
 include(MavericksCompatGuard)   # mavericks_assert_binary_compatible()
 include(MavericksVersion)       # mavericks_resolve_version() -- VERSION is derived, never committed
+include(MavericksDecisions)     # mavericks_require_icon() -- forced icon decision
