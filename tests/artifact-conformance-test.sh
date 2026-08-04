@@ -231,4 +231,20 @@ asset p.pkg 10' | sh "$S")"
 printf '%s\n' "$out" | grep -qi 'no build records' \
   || { echo "FAIL should say when there was nothing to compare; got: $out"; exit 1; }
 
+# --- artifact-facts derives the line from lines/<X>/, not a version heuristic ---------------------
+# The line is the directory name (matched by upstream version). A MAJOR-based line (clang 22,
+# nodejs 24) must emit its major -- not major.minor collapsed ("221"), which no identifier carries.
+# A MINOR-based line (golang 1.26 -> 126) must keep working.
+AF="$here/../scripts/artifact-facts.sh"
+_afline() {  # <full-version> <line-dir> <upstream-in-dir> -> the emitted `line` fact value
+  _r="$(mktemp -d "${TMPDIR:-/tmp}/af.XXXXXX")"
+  mkdir -p "$_r/lines/$2" "$_r/dist"; printf '%s\n' "$3" > "$_r/lines/$2/UPSTREAM_VERSION"
+  sh "$AF" "$_r/dist" "$1" "$_r" | sed -n 's/^line //p'
+  rm -rf "$_r"
+}
+[ "$(_afline 22.1.1-mavericks.1 22 22.1.1)" = 22 ] \
+  || { echo "FAIL: major-line should emit 'line 22', not major.minor '221'"; exit 1; }
+[ "$(_afline 1.26.5-mavericks.5 126 1.26.5)" = 126 ] \
+  || { echo "FAIL: minor-line (golang) should still emit 'line 126'"; exit 1; }
+
 echo "PASS: artifact-conformance"

@@ -14,11 +14,20 @@ root="${3:-$(pwd)}"
 
 printf 'expected %s\n' "$version"
 
-# A repo shipping parallel upstream lines names the line in every identity. Derive it from the version
-# rather than asking: lines/126 holds 1.26.x by construction, and versions.sh already refuses a line
-# whose upstream disagrees.
+# A repo shipping parallel upstream lines names the line in every identity. The line is the NAME of the
+# lines/<X>/ directory whose UPSTREAM_VERSION matches this build's upstream -- the authoritative source,
+# not a guess from the version. That guess only worked for MINOR-based lines (golang: 1.26 -> 126); a
+# MAJOR-based line (clang 22, nodejs 24) collapses 22.1.1 -> "221" and no identifier carries it. Reading
+# the directory handles both, since versions.sh already refuses a line whose upstream disagrees. Fall
+# back to the old major.minor heuristic only if nothing matches (a committed VERSION that has drifted).
 if [ -d "$root/lines" ]; then
-  printf 'line %s\n' "$(printf '%s' "${version%%-mavericks.*}" | cut -d. -f1,2 | tr -d '.')"
+  _up="${version%%-mavericks.*}"; _line=""
+  for _d in "$root"/lines/*/; do
+    [ -f "$_d/UPSTREAM_VERSION" ] || continue
+    [ "$(tr -d '[:space:]' < "$_d/UPSTREAM_VERSION")" = "$_up" ] && { _line="$(basename "$_d")"; break; }
+  done
+  [ -n "$_line" ] || _line="$(printf '%s' "$_up" | cut -d. -f1,2 | tr -d '.')"
+  printf 'line %s\n' "$_line"
 fi
 
 # Declared deviations live in INGREDIENTS.md, under "## Conformance deviations", as
