@@ -310,6 +310,53 @@ suffix** moves for a packaging-only re-release (recipe/patch/updater/CA change, 
   publishes twice (`-mavericks.1` from the push, `.2` from the dispatched repackage).
 - **A test that encodes the upstream version MUST read it from `UPSTREAM_VERSION`, never hardcode** — a
   hardcoded version fails its own CI on the next Renovate bump and blocks the automerge.
+- **When upstream ships several concurrently-supported lines** users want independently (Go minors,
+  Node majors), don't fold them into one `UPSTREAM_VERSION` — carry each as a track under `lines/`.
+  See the next section.
+
+## Multiple upstream lines (tracks)
+
+Most ports carry ONE upstream and its users always want the latest — a single `UPSTREAM_VERSION` is
+right, and this whole section does not apply. But some upstreams support **several lines at once**
+that users legitimately pin to independently — Go minors (`1.26.x`, `1.27.x`), Node majors (`24.x`,
+`26.x`), an LLVM release series. For those, **a line is a product**: golang proved this shape,
+nodejs is its first conformer. The rule is small; the drift it prevents is not.
+
+**`lines/<id>/` holds ONLY that line's `UPSTREAM_VERSION` and `patches/`.** Everything else — install
+prefix, pkg identifier, product title, and (load-bearing) the **Sparkle feed** — is *derived* from
+the line id, never stored per line. `build/*` scripts stay line-invariant and take the line via an
+env var (`GO_LINE`, `NODE_LINE`); only per-line *data* lives under `lines/`. A repo that cannot
+express a per-line difference in one place cannot drift into an inconsistent one.
+
+- **The point is the per-line feed: an installed updater NEVER crosses lines.** A 1.26 user is not
+  carried onto 1.27, and a 1.26.7 published *after* 1.27.0 disturbs nothing. Each line has its own
+  appcast/feed (`feed-126`, `feed-24`), and its release tag embeds the **full** upstream version
+  (`1.26.5-mavericks.1`, `24.6.0-mavericks.1`) so lines never collide on a tag. `-mavericks.N` is
+  counted per upstream version, so each line's N advances on its own.
+- **One CAPPED Renovate manager per line.** Each `lines/<id>/UPSTREAM_VERSION` gets its own
+  `customManager` whose `depNameTemplate` is line-specific, plus a cap (`allowedVersions: "<1.27"` /
+  `"<25"`) so the line never walks onto a version it was not built for. This is a *cap*, not an
+  automerge exception — ship-if-green still applies within the line. A new line arrives as a **new
+  `lines/` dir with its own manager**, never by moving an existing pin. One manager spanning multiple
+  lines is wrong: a single `allowedVersions` cannot cap each line.
+- **Adding a line = 3 files:** `lines/<id>/UPSTREAM_VERSION`, its capped manager, and the line's path
+  in the repackage caller's `own-upstream-paths`. Patches are optional — with none, fall back to the
+  newest lower line's patches and apply with fuzz, giving a new line a real chance to just work; if
+  the gates (compat guard, trust/characterization tests) catch a bad fuzzy apply, write
+  `lines/<id>/patches/`. **Never relax the gates to make a new line green** — a fuzzy apply can
+  succeed and be wrong, which is exactly what the gates exist to catch.
+- **CI is plan→matrix.** Decide the whole release plan ONCE in a `plan` job that walks `lines/*/` and
+  emits, per line, `{version, publish?}` — because a matrix job's outputs are last-writer-wins and
+  GitHub hides the matrix context from a job-level `if`. The build job matrixes over lines with
+  `fail-fast: false` (one line's breakage must not cancel another's). On a tag, the tag's embedded
+  upstream version names **exactly one** line to publish; the others only build.
+- **Side-by-side coexistence FORCES per-line functional identifiers.** If two lines install at once
+  (versioned prefixes — `/usr/local/go126`, `/usr/local/node24`), their pkg receipts, updater bundle
+  ids, and LaunchAgent labels must be per-line or they collide. This *refines* "never rename
+  functional identifiers" (Product naming): the identifier is stable **per line**, and the line
+  suffix is a coexistence necessity, not co-branding — record it in `INGREDIENTS.md`/conformance
+  deviations. A repo that installs one line at a time may keep stock paths and rely on the per-line
+  feed alone.
 
 ## Release workflow
 
@@ -575,6 +622,7 @@ none of which anything detected. A convention that is not checked is a conventio
 | `VERSION` is **not committed** (an untracked one is fine — it's a build product) | The committed copy drifts: container-tools built `-mavericks.14` from a file saying `.2`, which also made its tag path (`tag == VERSION`) impossible to satisfy |
 | Every workflow parses **with duplicate keys rejected** | A second `with:` on one step is legal YAML — last key wins — so ordinary parsers accept it and GitHub refuses to run the workflow. No other gate can catch it, because CI never starts |
 | No `INGREDIENTS.md` row marked ❌ unless it says **untrackable** | An ingredient nobody tracks goes stale silently; a bare ❌ reads as an oversight rather than a decision |
+| If `lines/` exists, every `lines/<id>/UPSTREAM_VERSION` has its OWN **capped** Renovate manager | An uncapped line walks onto the next major it was never built for; an unmanaged line goes stale silently; one manager spanning lines cannot cap each |
 
 Wire it with the reusable workflow — three lines, and it never changes when a check is added:
 
