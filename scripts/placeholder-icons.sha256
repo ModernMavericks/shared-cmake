@@ -1,0 +1,9 @@
+# SHA-256 of known PLACEHOLDER app icons that must NEVER ship in a ModernMavericks product.
+# mavericks_require_icon() and mavericks_add_updater_app() FATAL at configure time if a product's
+# .icns matches a line here -- UNLESS -DMAVERICKS_ALLOW_GENERIC_ICON=ON (the explicit "ship a
+# generic/placeholder icon on purpose" opt-in). This exists because an agent-generated stand-in
+# icon (a solid-colour fill) once slipped into a product as if it were real artwork.
+#
+# One lowercase-hex sha256 per line (first token; a trailing "# comment" is allowed). When you
+# generate a placeholder icon, register its hash here so it cannot ship unopted.
+da9efb9bda292b2cf7150fbf340021661521b77101fd03b6689e3f5cf814427d  # mavericks-openssh OpenSSHUpdater solid-teal placeholder (2026-08)

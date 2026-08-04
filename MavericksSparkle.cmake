@@ -9,6 +9,7 @@
 #                                   rendering updater/{updatecheck.plist,postinstall}.in per product
 #   scripts/sign_and_appcast.sh  -- sign a .pkg (via ed25519-sign) then emit appcast.xml (gen_appcast.sh)
 set(MAVERICKS_SHARED_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "mavericks-shared-cmake root")
+include("${MAVERICKS_SHARED_DIR}/MavericksDecisions.cmake")   # mavericks_reject_placeholder_icon()
 
 function(mavericks_fetch_sparkle out_var)
   # The Sparkle slice MUST match the arch of the updater that links it, so derive it from
@@ -58,6 +59,10 @@ function(mavericks_add_updater_app)
       message(FATAL_ERROR "mavericks_add_updater_app: ${req} required")
     endif()
   endforeach()
+
+  # The updater ships an icon like any other app -- gate it through the same placeholder guard as
+  # mavericks_require_icon, so an unopted placeholder can't slip in via the updater path.
+  mavericks_reject_placeholder_icon("${A_NAME}" "${A_ICON}")
 
   # Defaults for the mechanical args -- only NAME/BUNDLE_ID/FEED_URL/ICON/CONFIRM_TITLE/CONFIRM_BODY are required.
   if(NOT A_PRODUCT_NAME)

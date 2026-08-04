@@ -1,5 +1,42 @@
 # MavericksDecisions.cmake -- forced explicit decisions (no silent defaults for
 # decisions that matter). Currently: the app icon. include()d by Mavericks.cmake.
+set(MAVERICKS_DECISIONS_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "mavericks-shared-cmake root (decisions)")
+
+# mavericks_reject_placeholder_icon(<target> <icns>)
+#   FATAL if <icns> is a registered PLACEHOLDER (scripts/placeholder-icons.sha256), unless
+#   MAVERICKS_ALLOW_GENERIC_ICON=ON (the explicit opt-in). A ModernMavericks product must not ship
+#   a placeholder icon it never chose. The denylist path is overridable via
+#   MAVERICKS_PLACEHOLDER_DENYLIST (for tests). Reused by mavericks_require_icon and the Sparkle
+#   updater so BOTH icon entry points are gated.
+function(mavericks_reject_placeholder_icon target icns)
+  if(MAVERICKS_ALLOW_GENERIC_ICON)
+    return()
+  endif()
+  set(_denylist "${MAVERICKS_DECISIONS_DIR}/scripts/placeholder-icons.sha256")
+  if(MAVERICKS_PLACEHOLDER_DENYLIST)
+    set(_denylist "${MAVERICKS_PLACEHOLDER_DENYLIST}")
+  endif()
+  if(NOT EXISTS "${_denylist}" OR NOT EXISTS "${icns}")
+    return()
+  endif()
+  file(SHA256 "${icns}" _icnshash)
+  string(TOLOWER "${_icnshash}" _icnshash)
+  file(STRINGS "${_denylist}" _lines)
+  foreach(_line IN LISTS _lines)
+    string(STRIP "${_line}" _line)
+    if(_line STREQUAL "" OR _line MATCHES "^#")
+      continue()
+    endif()
+    string(REGEX MATCH "^[0-9a-fA-F]+" _banned "${_line}")
+    string(TOLOWER "${_banned}" _banned)
+    if(_banned STREQUAL _icnshash)
+      message(FATAL_ERROR
+        "mavericks: ${target} ships a known PLACEHOLDER icon (${icns}, sha256 ${_icnshash}). "
+        "Replace it with real artwork, or set -DMAVERICKS_ALLOW_GENERIC_ICON=ON to ship a generic "
+        "icon on purpose. ModernMavericks products must not ship an unopted placeholder icon.")
+    endif()
+  endforeach()
+endfunction()
 
 # mavericks_require_icon(TARGET <t> [ICNS <path>] [ALLOW_GENERIC])
 #   Gate + wiring for a bundle's app icon. Exactly one of:
@@ -20,6 +57,9 @@ function(mavericks_require_icon)
         "-- it wasn't produced (e.g. the source container was down and extraction failed). "
         "Bring the source up and re-configure, or set -DMAVERICKS_ALLOW_GENERIC_ICON=ON to "
         "ship the generic icon on purpose. Refusing to build ${MRI_TARGET} with no/wrong icon.")
+    endif()
+    if(NOT MRI_ALLOW_GENERIC)
+      mavericks_reject_placeholder_icon("${MRI_TARGET}" "${MRI_ICNS}")   # a real path that is a placeholder still FATALs
     endif()
     get_filename_component(_mri_name "${MRI_ICNS}" NAME)
     set_source_files_properties("${MRI_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)

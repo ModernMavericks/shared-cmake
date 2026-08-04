@@ -556,6 +556,21 @@ signal (see the auto-merge intent above — fix runtime regressions in `-maveric
   `--user` = interactive check; the daily LaunchAgent uses `--background` and is unaffected (it never
   runs a privileged install).
 
+## App icons (forced decision — no unopted placeholders)
+
+Every shipped app — **including the Sparkle updater** — must make an EXPLICIT icon decision.
+`mavericks_require_icon(TARGET t ICNS <path>)` and `mavericks_add_updater_app(… ICON <path>)` both
+FATAL at configure time if the icon is missing OR is a **registered placeholder** — its sha256 is
+listed in shared-cmake's `scripts/placeholder-icons.sha256`. The one way to ship a generic/
+placeholder icon is the explicit opt-in `-DMAVERICKS_ALLOW_GENERIC_ICON=ON` (or `ALLOW_GENERIC`).
+
+This gate exists because an agent-generated solid-colour stand-in once shipped in a product as if it
+were real artwork, waved off as a "minor" follow-up. **If you generate a placeholder icon, register
+its sha256 in `placeholder-icons.sha256`** in the same change — then the product cannot build a
+release until real artwork (a different hash) replaces it, or someone opts in on purpose. Both icon
+entry points call the shared `mavericks_reject_placeholder_icon`, so neither the main-app nor the
+updater path can smuggle one through.
+
 ## Artifact conformance (checked at package time)
 
 The conventions gate constrains the REPO. `check-artifact-conformance.sh` constrains what comes OUT,
