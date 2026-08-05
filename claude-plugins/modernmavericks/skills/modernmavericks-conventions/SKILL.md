@@ -87,6 +87,16 @@ shared-cmake's facilities rather than trusting the runner:
 - **Gate on the compat guard** (`mavericks_assert_binary_compatible`): fail the build if any shipped binary
   declares a floor above 10.9 or links a symbol 10.9 lacks. This is the in-CI equivalence proof — every
   project needs it (or an equivalent gate), since no 10.9 runner validates the output.
+  - **`MAVERICKS_REQUIRE_DEFINED_SYMBOLS` is product-specific — do NOT copy golang's blindly.** The guard
+    already denies the common post-10.9 symbols (`_clock_gettime`, `_os_unfair_lock_*`, `_os_log*`, …) as
+    *undefined imports* by default. `REQUIRE_DEFINED` is the opposite assertion — "this symbol MUST be
+    **defined** in the binary" — and is meant ONLY for a product that deliberately *uses* a post-10.9 API
+    and links a 10.9 backport shim that defines it: golang uses `clock_gettime` and ships
+    macports-legacy-support, so it sets `REQUIRE_DEFINED='_clock_gettime'` to prove the shim got linked. A
+    port that builds against the 10.9 SDK and takes the 10.9 fallback (most of them — e.g. openssh →
+    `gettimeofday`) links **no** shim and must leave `REQUIRE_DEFINED` **empty**. Copying golang's value
+    into such a repo makes the guard demand a shim that isn't there (every binary fails "required symbol
+    not DEFINED"). Decide it from *your* build (do you link a legacy-support shim?), not from the template.
 - Where a stronger proof fits, keep a **characterization reference**: commit a trusted native-10.9 artifact
   and compare the cross-build against it (magic-trackpad2's kext characterization), and/or an emulated
   smoke (golang's best-effort Rosetta self-test).
