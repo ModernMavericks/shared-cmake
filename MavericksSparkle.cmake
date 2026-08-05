@@ -37,8 +37,10 @@ function(mavericks_fetch_sparkle out_var)
 endfunction()
 
 # mavericks_add_updater_app(
-#   NAME <target>  BUNDLE_ID <id>  FEED_URL <appcast url>  ICON <path/to.icns>
-#   CONFIRM_TITLE <str>  CONFIRM_BODY <str>          # ^ the only required (per-project) values
+#   NAME <target>  BUNDLE_ID <id>  FEED_URL <appcast url>
+#   CONFIRM_TITLE <str>  CONFIRM_BODY <str>          # ^ the required (per-project) values
+#   [ICON <path/to.icns> | ALLOW_GENERIC]   # a real icon (placeholder-gated), OR the generic macOS
+#                                            # app icon on purpose (empty CFBundleIconFile, no artwork)
 #   [PRODUCT_NAME <str>]        # default: NAME              (shown in Sparkle dialogs)
 #   [VERSION <str>]             # default: ${PROJECT_VERSION}
 #   [AUTO_CHECK <true|false>]   # default: true
@@ -52,17 +54,13 @@ endfunction()
 # POST_UPDATE_HELPER: absolute path to an executable the updater runs (as the user) after a successful
 # install + the confirmation -- for product-specific follow-up (e.g. offer to roll a VM onto a new image).
 function(mavericks_add_updater_app)
-  cmake_parse_arguments(A ""
+  cmake_parse_arguments(A "ALLOW_GENERIC"
     "NAME;PRODUCT_NAME;BUNDLE_ID;FEED_URL;ED_PUBKEY;ED_PUBKEY_FILE;ICON;VERSION;AUTO_CHECK;SPARKLE_FRAMEWORK;LOG_PREFIX;CONFIRM_TITLE;CONFIRM_BODY;RELAUNCH_MARKER;PANE_HINT_KEY;POST_UPDATE_HELPER" "" ${ARGN})
-  foreach(req NAME BUNDLE_ID FEED_URL ICON CONFIRM_TITLE CONFIRM_BODY)
+  foreach(req NAME BUNDLE_ID FEED_URL CONFIRM_TITLE CONFIRM_BODY)
     if(NOT DEFINED A_${req})
       message(FATAL_ERROR "mavericks_add_updater_app: ${req} required")
     endif()
   endforeach()
-
-  # The updater ships an icon like any other app -- gate it through the same placeholder guard as
-  # mavericks_require_icon, so an unopted placeholder can't slip in via the updater path.
-  mavericks_reject_placeholder_icon("${A_NAME}" "${A_ICON}")
 
   # Defaults for the mechanical args -- only NAME/BUNDLE_ID/FEED_URL/ICON/CONFIRM_TITLE/CONFIRM_BODY are required.
   if(NOT A_PRODUCT_NAME)
@@ -123,7 +121,20 @@ function(mavericks_add_updater_app)
   set(MAVERICKS_RELAUNCH_MARKER "${A_RELAUNCH_MARKER}")
   set(MAVERICKS_PANE_HINT_KEY   "${A_PANE_HINT_KEY}")              # empty => notification mode
   set(MAVERICKS_POST_UPDATE_HELPER "${A_POST_UPDATE_HELPER}")      # empty => no post-install hook
-  get_filename_component(MAVERICKS_ICON_NAME "${A_ICON}" NAME_WE)
+  # Icon decision (mirrors mavericks_require_icon): a real ICON is gated through the placeholder
+  # guard; NO icon requires an explicit generic opt-in and ships the standard macOS app icon
+  # (empty CFBundleIconFile) -- embedding no artwork at all.
+  if(A_ICON)
+    mavericks_reject_placeholder_icon("${A_NAME}" "${A_ICON}")
+    get_filename_component(MAVERICKS_ICON_NAME "${A_ICON}" NAME_WE)
+  elseif(A_ALLOW_GENERIC OR MAVERICKS_ALLOW_GENERIC_ICON)
+    set(MAVERICKS_ICON_NAME "")   # empty CFBundleIconFile => generic macOS app icon, no artwork shipped
+    message(STATUS "Mavericks: ${A_NAME} ships the GENERIC macOS app icon by explicit opt-in")
+  else()
+    message(FATAL_ERROR
+      "mavericks_add_updater_app(${A_NAME}): no ICON. Provide ICON <path/to.icns>, or opt into the "
+      "generic macOS app icon with ALLOW_GENERIC (or -DMAVERICKS_ALLOW_GENERIC_ICON=ON).")
+  endif()
   # main.m needs the ObjC boolean form.
   if(A_AUTO_CHECK STREQUAL "true")
     set(MAVERICKS_AUTO_CHECK_OBJC "YES")
@@ -148,7 +159,11 @@ function(mavericks_add_updater_app)
     COMMAND ${CMAKE_COMMAND} -E make_directory ${_app}/Contents/Resources
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${A_NAME}> ${_app}/Contents/MacOS/${A_NAME}
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/${A_NAME}-Info.plist ${_app}/Contents/Info.plist
-    COMMAND ${CMAKE_COMMAND} -E copy ${A_ICON} ${_app}/Contents/Resources/${MAVERICKS_ICON_NAME}.icns
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${A_SPARKLE_FRAMEWORK} ${_app}/Contents/Frameworks/Sparkle.framework
     COMMENT "Assembling ${A_NAME}.app")
+  if(A_ICON)
+    add_custom_command(TARGET ${A_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${A_ICON} ${_app}/Contents/Resources/${MAVERICKS_ICON_NAME}.icns
+      COMMENT "Adding ${A_NAME}.app icon ${MAVERICKS_ICON_NAME}.icns")
+  endif()
 endfunction()
