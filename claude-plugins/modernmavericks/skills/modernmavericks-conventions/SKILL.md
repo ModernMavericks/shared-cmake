@@ -565,6 +565,29 @@ signal (see the auto-merge intent above — fix runtime regressions in `-maveric
   The updater's `Info.plist` (a normal app, not `LSUIElement`) exists to satisfy this — the caller must too.
   `--user` = interactive check; the daily LaunchAgent uses `--background` and is unaffected (it never
   runs a privileged install).
+- **The Sparkle comparison version must be dotted-numeric AND monotonic — the shared derivation makes
+  it so; never hand-roll it per product.** `SUStandardVersionComparator` only totally orders `X.Y.Z.N`,
+  and it reads the `-mavericks.N` suffix (or any stray letter) as EQUAL — so a same-upstream repackage
+  would be invisible to auto-update ("you're up to date"). The human string (`9.9p2-mavericks.3`) stays
+  in `<sparkle:shortVersionString>` / `CFBundleShortVersionString`; the *compared* value
+  (`<sparkle:version>` / `CFBundleVersion`) is derived to a numeric-only form by **both**
+  `scripts/gen_appcast.sh` and `MavericksSparkle.cmake`, which MUST stay identical (a mismatch means the
+  updater silently believes it's current). The derivation, in order:
+  - `-mavericks.N` → `.N` (the packaging axis);
+  - a **monotonic** in-version patch letter → `.` — the only one in the family is OpenSSH-portable
+    `X.YpZ` → `X.Y.Z` (`p2` is *newer* than `p1`, so `9.9p2` → `9.9.2` is order-preserving, and
+    `9.9p2 < 9.10p1` stays `9.9.2 < 9.10.1`);
+  - the result must be purely dotted-numeric, or the appcast step **fails closed**.
+  Most upstreams need no special case: semver (`1.26.5`), bare date (`20260727`), and self-upstream
+  dates/semver are all already dotted-numeric — variable length is fine (a date is one component, semver
+  three). Only a **letter** needs a rule, and openssh's `pN` is the family's first.
+  - **Adding a new non-numeric upstream shape:** put the transform in the shared derivation (both files,
+    identically) — never in a product's build, or the appcast and the updater's `CFBundleVersion` drift.
+    Fold in a separator ONLY if it is monotonic (a higher suffix = *newer*, like `pN`). A **non-monotonic**
+    prerelease suffix (`-rc1`, `beta` — the suffix means *older* than the release) must NOT be dot-joined
+    (`1.2.3rc1` → `1.2.3.1` would sort ABOVE `1.2.3`); leave the fail-closed check to force an explicit
+    decision (e.g. map the prerelease into a lower band like `1.2.2.9001`). The fail-closed gate is the
+    point — it catches exactly the "compares EQUAL / compares backwards" bugs before they ship.
 
 ## App icons (forced decision — no unopted placeholders)
 

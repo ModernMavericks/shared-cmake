@@ -30,3 +30,23 @@ setup() { SCRIPT="${BATS_TEST_DIRNAME}/../scripts/gen_appcast.sh"; }
   [[ "$output" == *"<sparkle:shortVersionString>1.102.0-mavericks.4</sparkle:shortVersionString>"* ]]
   [[ "$output" != *"<sparkle:version>1.102.0-mavericks.4</sparkle:version>"* ]]
 }
+
+# A monotonic OpenSSH-portable "pN" patch (p2 is NEWER than p1) normalizes to dotted-numeric, so
+# auto-update orders it; the pretty "9.9p2" stays in the short string. (openssh is the family's first
+# letter-in-upstream case.)
+@test "sparkle:version normalizes an OpenSSH-portable pN patch to dotted-numeric" {
+  printf 'notes\n' > "$BATS_TMPDIR/n.md"
+  run sh "$SCRIPT" "P" "9.9p2-mavericks.1" "http://x/y.pkg" "10.9.5" "$BATS_TMPDIR/n.md" 'length="1"'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"<sparkle:version>9.9.2.1</sparkle:version>"* ]]
+  [[ "$output" == *"<sparkle:shortVersionString>9.9p2-mavericks.1</sparkle:shortVersionString>"* ]]
+}
+
+# A NON-monotonic prerelease letter (rc1 means OLDER than the release) must NOT be silently dot-joined
+# -- the gate still fails closed so a human maps it into a lower numeric band instead.
+@test "a non-monotonic prerelease letter still fails closed" {
+  printf 'notes\n' > "$BATS_TMPDIR/n.md"
+  run sh "$SCRIPT" "P" "1.2.3rc1-mavericks.1" "http://x/y.pkg" "10.9.5" "$BATS_TMPDIR/n.md" 'length="1"'
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not purely dotted-numeric"* ]]
+}
